@@ -118,7 +118,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 <div class="fp" id="fpm">
 <div class="fp-c">
   <h3>Schlüssel verifizieren</h3>
-  <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner (z.B. per Telefon).</p>
+  <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner.</p>
   <div class="fp-grid">
     <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
     <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
@@ -141,10 +141,10 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
   </div>
   <div class="sb-s"><h4>Peers</h4><ul class="p-l" id="pl"><li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li></ul></div>
   <div class="sn"><p>
-    <span style="color:var(--gn-d)">●</span> Double Ratchet (symmetrisch)<br>
+    <span style="color:var(--gn-d)">●</span> Chain-Ratchet (symmetrisch)<br>
     <span style="color:var(--gn-d)">●</span> X25519 + XSalsa20-Poly1305<br>
     <span style="color:var(--gn-d)">●</span> HMAC-SHA512 (nacl.hash)<br>
-    <span style="color:var(--gn-d)">●</span> Forward Secrecy via Ratchet
+    <span style="color:var(--gn-d)">●</span> Forward Secrecy
   </p></div>
 </aside>
 <main class="cm">
@@ -170,18 +170,11 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 
 <script>
 // =============================================
-// KRYPTOCHAT v2 — Symmetrische Chain-Ratchet
+// KRYPTOCHAT v3
+// Symmetrische Chain-Ratchet mit korrektem
+// DH-Ratchet Key-Handling
 // =============================================
-//
-// Design:
-// 1. Identity-DH (nacl.box.before) → shared secret
-// 2. HKDF(shared) → chain_send + chain_recv (deterministisch via ID-Ordering)
-// 3. Jede Nachricht: Chain-Key → Message-Key, dann DH-Ratchet mit ephemeral key
-// 4. Sender UND Receiver ratcheten → Chains bleiben synchron
-// 5. Server sieht nur verschlüsselte ciphertext + ephemeral keys
-//
 
-// ---- DEBUG ----
 const logEl = document.getElementById('log');
 document.getElementById('toglog').addEventListener('click', () => logEl.classList.toggle('show'));
 function log(msg, cls) {
@@ -191,16 +184,11 @@ function log(msg, cls) {
   d.textContent = `[${t}] ${msg}`;
   logEl.appendChild(d);
   logEl.scrollTop = logEl.scrollHeight;
-  console.log(`[${t}] ${msg}`);
 }
 window.onerror = (msg, src, line) => log(`JS: ${msg} (${line})`, 'no');
 
-if (typeof nacl === 'undefined') {
-  log('TweetNaCl nicht geladen!', 'no');
-  document.getElementById('jst').textContent = 'Bibliothek fehlt!';
-}
+if (typeof nacl === 'undefined') log('TweetNaCl fehlt!', 'no');
 
-// ---- HELPERS ----
 const $ = id => document.getElementById(id);
 const B64 = {
   enc: u => btoa(String.fromCharCode(...u)),
@@ -211,17 +199,14 @@ const uid = () => { const b = nacl.randomBytes(6); return Array.from(b).map(x =>
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
 // =============================================
-// KRYPTO-PRIMITIVEN
+// KRYPTO
 // =============================================
 
-// HMAC-SHA512 via nacl.hash (RFC 2104)
 function hmac(key, data) {
-  const B = 128; // SHA-512 block size
+  const B = 128;
   let k = key.length > B ? nacl.hash(key) : key;
-  const padded = new Uint8Array(B);
-  padded.set(k);
-  const ipad = new Uint8Array(B);
-  const opad = new Uint8Array(B);
+  const padded = new Uint8Array(B); padded.set(k);
+  const ipad = new Uint8Array(B), opad = new Uint8Array(B);
   for (let i = 0; i < B; i++) { ipad[i] = padded[i] ^ 0x36; opad[i] = padded[i] ^ 0x5c; }
   const inner = new Uint8Array(B + data.length);
   inner.set(ipad); inner.set(data, B);
@@ -230,33 +215,25 @@ function hmac(key, data) {
   return nacl.hash(outer);
 }
 
-// HKDF-Expand
 function hkdfExpand(prk, info, len) {
   const buf = new Uint8Array(info.length + 1);
   buf.set(info); buf[info.length] = 0x01;
   return hmac(prk, buf).slice(0, len || 64);
 }
 
-// HKDF-Extract
 function hkdfExtract(ikm, salt) {
   return hmac(salt || new Uint8Array(64), ikm);
 }
 
-// Chain Key → Message Key (32 bytes encryption key + 24 bytes nonce)
 function deriveMsgKey(ck) {
-  const mk = hmac(ck, U8.enc('MK'));       // 64 bytes
-  return {
-    ek: mk.slice(0, 32),                   // encryption key (XSalsa20)
-    nonce: mk.slice(32, 56)                 // 24 bytes nonce
-  };
+  const mk = hmac(ck, U8.enc('MK'));
+  return { ek: mk.slice(0, 32), nonce: mk.slice(32, 56) };
 }
 
-// Advance chain key
 function advanceChain(ck) {
   return hmac(ck, U8.enc('CK'));
 }
 
-// DH Ratchet: shared → new chain keys
 function dhRatchetUpdate(rk, shared) {
   const prk = hkdfExtract(shared, rk);
   return {
@@ -266,11 +243,10 @@ function dhRatchetUpdate(rk, shared) {
   };
 }
 
-// Fingerprint: concat of identity + ratchet pubkey → SHA-512 → display
-function fp(idPub, ratchetPub) {
-  const combined = new Uint8Array(idPub.length + ratchetPub.length);
-  combined.set(idPub); combined.set(ratchetPub, idPub.length);
-  const h = nacl.hash(combined).slice(0, 12);
+function fp(idPub, rpPub) {
+  const c = new Uint8Array(idPub.length + rpPub.length);
+  c.set(idPub); c.set(rpPub, idPub.length);
+  const h = nacl.hash(c).slice(0, 12);
   return Array.from(h).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
 }
 
@@ -278,59 +254,51 @@ function fp(idPub, ratchetPub) {
 // STATE
 // =============================================
 
-const myKP = nacl.box.keyPair();   // Identity keypair (statisch)
-const myRP = nacl.box.keyPair();   // Ratchet keypair (wird pro Session rotiert)
+const myKP = nacl.box.keyPair();  // Identity (statisch)
+const myRP = nacl.box.keyPair();  // Ratchet (pro Session)
 const myId = uid();
 let socket = null, room = null;
 let peers = new Map();
-// Peer-Struktur:
-// {
-//   pubKey: Uint8Array,           // Identity public key
-//   ratchetPub: Uint8Array,       // Remote ratchet public key (aus KX)
-//   rootKey: Uint8Array,          // Current root key
-//   sendCK: Uint8Array,           // Send chain key
-//   recvCK: Uint8Array,           // Receive chain key
-//   ephSecret: Uint8Array,        // Mein ephemeral secret (für DH-Ratchet)
-//   verified: boolean
-// }
 let stats = { msgs: 0, ratchets: 0 };
 
 $('mid').textContent = myId;
 log(`ID: ${myId}`, 'ok');
 
 // =============================================
-// KX: Schlüsselaustausch initialisieren
+// KX: Chains initialisieren
 // =============================================
 
 function handleKX(fromId, kxData) {
   const peerPub = B64.dec(kxData.pubKey);
   const peerRP = B64.dec(kxData.ratchetPub);
 
-  // Shared secret via Identity-DH
+  // Shared secret via Identity-DH (nacl.box.before = scalarMult)
   const shared = nacl.box.before(peerPub, myKP.secretKey);
-  log(`KX shared: ${B64.enc(shared).substring(0, 24)}...`, 'ok');
+  log(`Shared: ${B64.enc(shared).substring(0, 20)}...`, 'ok');
 
-  // Zwei Chains deterministisch aus ID-Ordering ableiten
-  // Der mit der kleineren ID bekommt chain_L zum Senden, der andere chain_R
+  // Zwei Chains deterministisch via ID-Ordering
   const rootKey = hkdfExtract(shared, U8.enc('INIT'));
   const chain_L = hkdfExpand(rootKey, U8.enc('CL'), 64);
   const chain_R = hkdfExpand(rootKey, U8.enc('CR'), 64);
   const iAmFirst = myId < fromId;
 
-  const peer = {
+  // ★ FIX: ratchetSk = mein eigener Ratchet-Secret-Key
+  // Wird beim Decrypt gebraucht für DH-Ratchet mit ephemeral keys
+  peers.set(fromId, {
     pubKey: peerPub,
-    ratchetPub: peerRP,
+    ratchetPub: peerRP,           // Remote ratchet public key
+    ratchetSk: myRP.secretKey,    // ★ Mein Ratchet Secret Key
     rootKey: rootKey,
     sendCK: iAmFirst ? chain_L : chain_R,
     recvCK: iAmFirst ? chain_R : chain_L,
-    ephSecret: null,
-    verified: false
-  };
+    ephSecret: null,              // Wird bei erstem Decrypt gesetzt
+    verified: false,
+    usedNonces: new Set()
+  });
 
-  peers.set(fromId, peer);
-  log(`Chains init [${iAmFirst ? 'L→send' : 'R→send'}]`, 'ok');
+  log(`Chains [${iAmFirst ? 'L=send' : 'R=send'}]`, 'ok');
 
-  // Eigene KX-Antwort senden (falls noch nicht geschehen)
+  // Eigene KX-Antwort
   socket.send(JSON.stringify({
     type: 'msg', from: myId, to: fromId,
     data: {
@@ -343,12 +311,13 @@ function handleKX(fromId, kxData) {
 }
 
 // =============================================
-// ENCRYPT: Nachricht verschlüsseln
+// ENCRYPT
 // =============================================
 
 function encryptMsg(peer, plaintext) {
   // 1. Message Key aus Send-Chain
   const { ek, nonce } = deriveMsgKey(peer.sendCK);
+  log(`ENC: sendCK=${B64.enc(peer.sendCK).substring(0,16)}... ek=${B64.enc(ek).substring(0,16)}...`, 'inf');
 
   // 2. Chain vortreten
   peer.sendCK = advanceChain(peer.sendCK);
@@ -356,28 +325,29 @@ function encryptMsg(peer, plaintext) {
   // 3. Verschlüsseln
   const ct = nacl.secretbox(U8.enc(plaintext), nonce, ek);
 
-  // 4. Neues ephemeral keypair für Forward Secrecy
+  // 4. Ephemeral keypair für Forward Secrecy
   const eph = nacl.box.keyPair();
 
-  // 5. DH-Ratchet: shared = DH(eph_sk, remote_ratchet_pub)
+  // 5. DH-Ratchet mit remote ratchetPub
   const dhShared = nacl.scalarMult(eph.secretKey, peer.ratchetPub);
   const { newRK, ckSend, ckRecv } = dhRatchetUpdate(peer.rootKey, dhShared);
   peer.rootKey = newRK;
-  peer.sendCK = ckSend;   // ← Send-Chain rotiert
-  // recvCK bleibt unverändert (rotiert erst beim Empfangen)
-  peer.ephSecret = eph.secretKey;  // für nächsten Empfang
+  peer.sendCK = ckSend;
+  peer.ephSecret = eph.secretKey;
 
   stats.ratchets++;
 
+  log(`ENC OK, rp=${B64.enc(eph.publicKey).substring(0,16)}...`, 'ok');
+
   return {
-    rp: B64.enc(eph.publicKey),    // ephemeral ratchet key
+    rp: B64.enc(eph.publicKey),
     n: B64.enc(nonce),
     c: B64.enc(ct)
   };
 }
 
 // =============================================
-// DECRYPT: Nachricht entschlüsseln
+// DECRYPT
 // =============================================
 
 function decryptMsg(peer, data) {
@@ -385,22 +355,29 @@ function decryptMsg(peer, data) {
   const ciphertext = B64.dec(data.c);
 
   // Replay-Schutz
-  const nonceKey = B64.enc(nonce);
-  if (peer.usedNonces && peer.usedNonces.has(nonceKey)) {
-    log('Replay erkannt!', 'no');
-    return null;
-  }
+  const nk = B64.enc(nonce);
+  if (peer.usedNonces.has(nk)) { log('Replay!', 'no'); return null; }
 
-  // DH-Ratchet falls ephemeral key vorhanden
+  // DH-Ratchet wenn ephemeral key vorhanden
   if (data.rp) {
     const remoteEphPub = B64.dec(data.rp);
-    const dhShared = nacl.scalarMult(peer.ephSecret || myRP.secretKey, remoteEphPub);
+    log(`DH-Ratchet mit rp=${data.rp.substring(0,16)}...`, 'inf');
+
+    // ★ FIX: ratchetSk statt myRP.secretKey
+    // ratchetSk = mein Ratchet-Secret (gesetzt in handleKX)
+    // remoteEphPub = ephemeral public key des Senders
+    // → Beide Seiten bekommen identisches DH-Ergebnis
+    const dhSk = peer.ephSecret || peer.ratchetSk;
+    if (!dhSk) { log('Kein DH-Secret-Key!', 'no'); return null; }
+
+    const dhShared = nacl.scalarMult(dhSk, remoteEphPub);
+    log(`DH shared: ${B64.enc(dhShared).substring(0,20)}...`, 'inf');
+
     const { newRK, ckSend, ckRecv } = dhRatchetUpdate(peer.rootKey, dhShared);
     peer.rootKey = newRK;
-    peer.recvCK = ckRecv;   // ← Recv-Chain rotiert
-    // sendCK bleibt unverändert (rotiert erst beim Senden)
+    peer.recvCK = ckRecv;
 
-    // Neues ephemeral keypair für nächsten Send
+    // Neues ephemeral für nächsten Send
     const newEph = nacl.box.keyPair();
     peer.ephSecret = newEph.secretKey;
 
@@ -408,28 +385,20 @@ function decryptMsg(peer, data) {
     log('DH-Ratchet ✓', 'ok');
   }
 
-  if (!peer.recvCK) {
-    log('Kein recvCK!', 'no');
-    return null;
-  }
+  if (!peer.recvCK) { log('Kein recvCK!', 'no'); return null; }
 
   // Message Key aus Recv-Chain
-  const { ek, nonce: derivedNonce } = deriveMsgKey(peer.recvCK);
+  const { ek } = deriveMsgKey(peer.recvCK);
+  log(`DEC: recvCK=${B64.enc(peer.recvCK).substring(0,16)}... ek=${B64.enc(ek).substring(0,16)}...`, 'inf');
 
   // Chain vortreten
   peer.recvCK = advanceChain(peer.recvCK);
 
-  // Entschlüsseln (nonce aus Nachricht verwenden, nicht aus Chain)
+  // Entschlüsseln (nonce aus Nachricht!)
   const pt = nacl.secretbox.open(ciphertext, nonce, ek);
-  if (!pt) {
-    log('Decrypt failed!', 'no');
-    return null;
-  }
+  if (!pt) { log('Decrypt failed!', 'no'); return null; }
 
-  // Nonce tracken
-  if (!peer.usedNonces) peer.usedNonces = new Set();
-  peer.usedNonces.add(nonceKey);
-
+  peer.usedNonces.add(nk);
   return U8.dec(pt);
 }
 
@@ -461,7 +430,7 @@ function connect(r) {
   }
 
   socket.onopen = () => {
-    log('WS verbunden', 'ok');
+    log('WS ✓', 'ok');
     socket.send(JSON.stringify({
       type: 'join', room: r, userId: myId,
       pubKey: B64.enc(myKP.publicKey),
@@ -492,9 +461,8 @@ function connect(r) {
     socket = null;
     $('est').textContent = 'Getrennt';
     $('est').style.color = 'var(--rd)';
-    addSys('Verbindung verloren — reconnecting...');
-    peers.clear();
-    updPeers();
+    addSys('Verbindung verloren...');
+    peers.clear(); updPeers();
     setTimeout(() => { if (room) connect(room); }, 3000);
   };
 
@@ -506,110 +474,54 @@ function connect(r) {
 }
 
 // =============================================
-// NACHRICHTEN-HANDLER
+// NACHRICHTEN
 // =============================================
 
 function handleMsg(msg) {
-  // ── Bestehende Peers beim Join ──
   if (msg.type === 'peers') {
     log(`${msg.peers.length} Peer(s)`, msg.peers.length ? 'ok' : 'wr');
     for (const p of msg.peers) {
-      if (!p.pubKey || !p.ratchetPub) { log(`Peer ${p.id} ohne Keys`, 'wr'); continue; }
-      // KX an bestehenden Peer senden
-      const peerPub = B64.dec(p.pubKey);
+      if (!p.pubKey || !p.ratchetPub) continue;
       socket.send(JSON.stringify({
         type: 'msg', from: myId, to: p.id,
-        data: {
-          type: 'kx',
-          pubKey: B64.enc(myKP.publicKey),
-          ratchetPub: B64.enc(myRP.publicKey)
-        }
+        data: { type: 'kx', pubKey: B64.enc(myKP.publicKey), ratchetPub: B64.enc(myRP.publicKey) }
       }));
       log(`KX → ${p.id}`, 'ok');
     }
     updPeers();
   }
 
-  // ── Neuer Peer tritt bei ──
   if (msg.type === 'peer-joined') {
     const p = msg.peer;
     log(`peer-joined: ${p.id}`, 'ok');
     if (p.pubKey && p.ratchetPub) {
       socket.send(JSON.stringify({
         type: 'msg', from: myId, to: p.id,
-        data: {
-          type: 'kx',
-          pubKey: B64.enc(myKP.publicKey),
-          ratchetPub: B64.enc(myRP.publicKey)
-        }
+        data: { type: 'kx', pubKey: B64.enc(myKP.publicKey), ratchetPub: B64.enc(myRP.publicKey) }
       }));
       log(`KX → ${p.id}`, 'ok');
     }
     updPeers();
   }
 
-  // ── MSG: KX oder verschlüsselte Nachricht ──
   if (msg.type === 'msg' && msg.data) {
     const d = msg.data;
 
-    // KX: Schlüsselaustausch
     if (d.type === 'kx') {
       log(`KX ← ${msg.from}`, 'ok');
-
       if (!peers.has(msg.from)) {
-        // Erster KX: Chains initialisieren
         handleKX(msg.from, d);
         addSys(`${msg.from} verbunden`, true);
         updPeers();
       } else {
-        // Bereits verbunden — neuen KX ignorieren (Chains existieren bereits)
-        log(`KX von ${msg.from} — bereits verbunden`, 'wr');
+        log(`KX von ${msg.from} — ignoriert (bereit)`, 'wr');
       }
     }
 
-    // ENC: Verschlüsselte Nachricht
     if (d.type === 'enc') {
       log(`ENC ← ${msg.from}`, 'inf');
       const peer = peers.get(msg.from);
-
-      if (!peer) {
-        // Unbekannter Peer — versuche KX mit ratchetPub aus der Nachricht
-        if (d.rp) {
-          log(`Unbekannter Peer ${msg.from} — initiiere KX...`, 'wr');
-          // Erstelle temporären Peer-Eintrag mit der ephemeral key als ratchetPub
-          const ephPub = B64.dec(d.rp);
-          const shared = nacl.box.before(ephPub, myKP.secretKey);
-          const rootKey = hkdfExtract(shared, U8.enc('INIT'));
-          const chain_L = hkdfExpand(rootKey, U8.enc('CL'), 64);
-          const chain_R = hkdfExpand(rootKey, U8.enc('CR'), 64);
-          const iAmFirst = myId < msg.from;
-
-          const newPeer = {
-            pubKey: ephPub,
-            ratchetPub: ephPub,
-            rootKey: rootKey,
-            sendCK: iAmFirst ? chain_L : chain_R,
-            recvCK: iAmFirst ? chain_R : chain_L,
-            ephSecret: myRP.secretKey,
-            verified: false,
-            usedNonces: new Set()
-          };
-          peers.set(msg.from, newPeer);
-
-          // Jetzt entschlüsseln
-          const text = decryptMsg(newPeer, d);
-          if (text !== null) {
-            addMsg(msg.from, text, false);
-            stats.msgs++;
-            updStats();
-            log(`OK: "${text.substring(0, 30)}..."`, 'ok');
-          }
-          updPeers();
-        } else {
-          log('Unbekannter Peer ohne rp!', 'no');
-        }
-        return;
-      }
+      if (!peer) { log('Unbekannter Peer!', 'no'); return; }
 
       try {
         const text = decryptMsg(peer, d);
@@ -617,7 +529,7 @@ function handleMsg(msg) {
           addMsg(msg.from, text, false);
           stats.msgs++;
           updStats();
-          log(`OK: "${text.substring(0, 30)}..."`, 'ok');
+          log(`OK: "${text.substring(0, 30)}"`, 'ok');
         }
       } catch (e) {
         log(`Decrypt error: ${e.message}`, 'no');
@@ -626,12 +538,11 @@ function handleMsg(msg) {
     }
   }
 
-  // ── Peer verlässt ──
   if (msg.type === 'leave') {
     log(`${msg.userId} left`);
     peers.delete(msg.userId);
     updPeers();
-    addSys(`${msg.userId} hat den Raum verlassen`);
+    addSys(`${msg.userId} hat verlassen`);
   }
 }
 
