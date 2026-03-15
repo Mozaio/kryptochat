@@ -10,41 +10,27 @@
 <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#06080d;--bg1:#0b0e16;--bg2:#111521;--bg3:#171c2b;--bg-in:#0d1119;
-  --gn:#39ff14;--gn-d:#1a7a0a;--gn-g:rgba(57,255,20,.15);--gn-g2:rgba(57,255,20,.3);
-  --cy:#00e5ff;--cy-d:#006b7a;--am:#ffb020;--rd:#ff3b3b;
-  --t1:#d8dce8;--t2:#6b7394;--t3:#3a4060;
-  --bo:#1a1f30;--bo2:#252b40;
-  --fm:'JetBrains Mono','Fira Code',monospace;
-  --fs:'Outfit',system-ui,sans-serif;
-  --r:8px;
-}
+:root{--bg:#06080d;--bg1:#0b0e16;--bg2:#111521;--bg-in:#0d1119;--gn:#39ff14;--gn-d:#1a7a0a;--gn-g:rgba(57,255,20,.15);--gn-g2:rgba(57,255,20,.3);--cy:#00e5ff;--am:#ffb020;--rd:#ff3b3b;--t1:#d8dce8;--t2:#6b7394;--t3:#3a4060;--bo:#1a1f30;--bo2:#252b40;--fm:'JetBrains Mono',monospace;--fs:'Outfit',sans-serif;--r:8px}
 html,body{height:100%;overflow:hidden}
 body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;flex-direction:column}
-body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent 0,transparent 2px,rgba(57,255,20,.01) 2px,rgba(57,255,20,.01) 4px);pointer-events:none;z-index:1000}
 
-/* === ENTRY OVERLAY === */
-.ov{position:fixed;inset:0;background:rgba(4,6,12,.95);backdrop-filter:blur(30px);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .5s,visibility .5s}
+.ov{position:fixed;inset:0;background:rgba(4,6,12,.97);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .5s,visibility .5s}
 .ov.h{opacity:0;visibility:hidden;pointer-events:none}
-.cd{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:44px;width:440px;max-width:92vw;text-align:center;animation:ci .5s ease}
-@keyframes ci{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+.cd{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:44px;width:460px;max-width:92vw;text-align:center}
 .cd .ico{width:60px;height:60px;margin:0 auto 18px;background:var(--gn-g);border:1px solid var(--gn-d);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px}
 .cd h1{font-family:var(--fm);font-size:22px;font-weight:600;color:var(--gn);margin-bottom:6px}
 .cd .sub{color:var(--t2);font-size:13px;margin-bottom:30px;line-height:1.6}
-.cd input{width:100%;padding:14px 18px;background:var(--bg-in);border:1px solid var(--bo);border-radius:var(--r);color:var(--t1);font-family:var(--fm);font-size:15px;outline:none;text-align:center;letter-spacing:1px;transition:border-color .2s}
+.cd input{width:100%;padding:14px;background:var(--bg-in);border:1px solid var(--bo);border-radius:var(--r);color:var(--t1);font-family:var(--fm);font-size:15px;outline:none;text-align:center;transition:border-color .2s}
 .cd input:focus{border-color:var(--gn);box-shadow:0 0 0 3px var(--gn-g)}
-.cd input::placeholder{color:var(--t3);letter-spacing:0}
+.cd input::placeholder{color:var(--t3)}
 .cd .btn{width:100%;margin-top:14px;padding:14px;background:var(--gn);color:var(--bg);border:none;border-radius:var(--r);font-family:var(--fm);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
-.cd .btn:hover{background:#5fff3a;box-shadow:0 0 30px var(--gn-g2)}
-.cd .btn:active{transform:scale(.98)}
-.cd .btn:disabled{opacity:.4;cursor:not-allowed}
+.cd .btn:hover{background:#5fff3a}.cd .btn:disabled{opacity:.4;cursor:not-allowed}
 .cd .st{margin-top:14px;font-family:var(--fm);font-size:12px;color:var(--am);min-height:20px}
+.dbg{margin-top:12px;padding:10px;background:var(--bg-in);border:1px solid var(--bo);border-radius:var(--r);font-family:var(--fm);font-size:10px;color:var(--t3);text-align:left;max-height:140px;overflow-y:auto;line-height:1.7}
+.dbg .ok{color:var(--gn)}.dbg .no{color:var(--rd)}
 .cd .info{margin-top:20px;padding-top:18px;border-top:1px solid var(--bo);text-align:left}
 .cd .info p{font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.9}
-.cd .info .d{color:var(--gn-d);margin-right:4px}
 
-/* === FINGERPRINT MODAL === */
 .fp{position:fixed;inset:0;background:rgba(4,6,12,.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;visibility:hidden;transition:all .3s}
 .fp.v{opacity:1;visibility:visible}
 .fp-c{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:32px;width:480px;max-width:90vw}
@@ -59,7 +45,6 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .fp-a .y{background:var(--gn);color:var(--bg)}.fp-a .y:hover{background:#5fff3a}
 .fp-a .n{background:transparent;color:var(--t2);border-color:var(--bo)}.fp-a .n:hover{border-color:var(--t3);color:var(--t1)}
 
-/* === APP LAYOUT === */
 .app{display:grid;grid-template-columns:260px 1fr;height:100vh;opacity:0;transition:opacity .5s}
 .app.v{opacity:1}
 .sb{background:var(--bg1);border-right:1px solid var(--bo);display:flex;flex-direction:column;overflow-y:auto}
@@ -75,35 +60,29 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .st-b .sv.g{color:var(--gn)}.st-b .sv.c{color:var(--cy)}.st-b .sv.a{color:var(--am)}
 .p-l{list-style:none}
 .p-i{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg2);border:1px solid var(--bo);border-radius:var(--r);margin-bottom:5px}
-.p-i:hover{border-color:var(--bo2)}
 .p-inf{display:flex;align-items:center;gap:8px}
-.sd{width:8px;height:8px;border-radius:50%;background:var(--gn);box-shadow:0 0 6px var(--gn-g2);animation:pu 2s ease-in-out infinite}
-.sd.w{background:var(--am);box-shadow:0 0 6px rgba(255,176,32,.3)}
+.sd{width:8px;height:8px;border-radius:50%;background:var(--gn);animation:pu 2s ease-in-out infinite}
+.sd.w{background:var(--am)}
 @keyframes pu{0%,100%{opacity:1}50%{opacity:.5}}
 .p-nm{font-family:var(--fm);font-size:11px;color:var(--t2)}
 .bv{font-family:var(--fm);font-size:9px;padding:3px 8px;background:transparent;border:1px solid var(--gn-d);color:var(--gn);border-radius:4px;cursor:pointer;transition:all .2s}
-.bv:hover{background:var(--gn-g);border-color:var(--gn)}
+.bv:hover{background:var(--gn-g)}
 .bv.ok{border-color:var(--cy-d);color:var(--cy)}
 .sn{margin-top:auto;padding:12px 18px;border-top:1px solid var(--bo)}
 .sn p{font-family:var(--fm);font-size:9px;color:var(--t3);line-height:1.7}
-.sn .ni{color:var(--gn-d);margin-right:3px}
 
-/* === CHAT AREA === */
 .cm{display:flex;flex-direction:column;background:var(--bg);position:relative}
-.cm::before{content:'';position:absolute;inset:0;background-image:radial-gradient(circle,var(--bo) 1px,transparent 1px);background-size:24px 24px;opacity:.3;pointer-events:none}
 .ch{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:var(--bg1);border-bottom:1px solid var(--bo)}
 .ch-l h2{font-family:var(--fm);font-size:13px;font-weight:500}
 .eb{display:inline-flex;align-items:center;gap:5px;margin-top:3px;font-family:var(--fm);font-size:10px;color:var(--gn);background:var(--gn-g);padding:2px 9px;border-radius:20px;border:1px solid var(--gn-d)}
 .eb .dot{width:6px;height:6px;border-radius:50%;background:var(--gn);animation:rp 3s linear infinite}
-@keyframes rp{0%{opacity:1;transform:scale(1)}50%{opacity:.3;transform:scale(.6)}100%{opacity:1;transform:scale(1)}}
+@keyframes rp{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
 .oc{font-family:var(--fm);font-size:12px;color:var(--t2)}.oc span{color:var(--gn);font-weight:600}
-
 .mc{flex:1;overflow-y:auto;position:relative;z-index:1;padding:20px;display:flex;flex-direction:column;gap:4px}
-.mc::-webkit-scrollbar{width:5px}.mc::-webkit-scrollbar-track{background:transparent}.mc::-webkit-scrollbar-thumb{background:var(--bo);border-radius:3px}
+.mc::-webkit-scrollbar{width:5px}.mc::-webkit-scrollbar-thumb{background:var(--bo);border-radius:3px}
 .es{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:8px}
 .es .ei{font-size:36px;opacity:.3}
 .es p{font-family:var(--fm);font-size:11px;color:var(--t3);line-height:1.6}
-
 .mg{animation:mi .3s ease}
 @keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .ms{font-family:var(--fm);font-size:10px;color:var(--t3);margin-bottom:2px;margin-left:2px}
@@ -118,158 +97,158 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
 .mm{display:flex;align-items:center;gap:6px;margin-top:3px;justify-content:flex-end}
 .mg.in .mm{justify-content:flex-start}
 .mt{font-family:var(--fm);font-size:9px;color:var(--t3)}
-.mi-i{font-size:9px;opacity:.5}
-
-.ia{position:relative;z-index:1;padding:14px 20px 16px;background:var(--bg1);border-top:1px solid var(--bo)}
+.ia{position:relative;z-index:1;padding:14px 20px;background:var(--bg1);border-top:1px solid var(--bo)}
 .iw{display:flex;gap:8px;align-items:flex-end}
-.mn{flex:1;background:var(--bg-in);border:1px solid var(--bo);border-radius:10px;padding:12px 16px;color:var(--t1);font-family:var(--fs);font-size:13px;outline:none;resize:none;min-height:44px;max-height:120px;transition:border-color .2s;line-height:1.4}
+.mn{flex:1;background:var(--bg-in);border:1px solid var(--bo);border-radius:10px;padding:12px 16px;color:var(--t1);font-family:var(--fs);font-size:13px;outline:none;resize:none;min-height:44px;max-height:120px;line-height:1.4;transition:border-color .2s}
 .mn:focus{border-color:var(--gn-d);box-shadow:0 0 0 3px var(--gn-g)}
 .mn::placeholder{color:var(--t3)}.mn:disabled{opacity:.4;cursor:not-allowed}
-.bs{width:44px;height:44px;background:var(--gn);border:none;border-radius:10px;color:var(--bg);font-size:18px;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.bs:hover:not(:disabled){background:#5fff3a;box-shadow:0 0 16px var(--gn-g2);transform:scale(1.05)}
-.bs:active:not(:disabled){transform:scale(.95)}.bs:disabled{opacity:.3;cursor:not-allowed}
-.ih{display:flex;justify-content:space-between;margin-top:6px;padding:0 2px}
-.ih span{font-family:var(--fm);font-size:9px;color:var(--t3)}
+.bs{width:44px;height:44px;background:var(--gn);border:none;border-radius:10px;color:var(--bg);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.bs:hover:not(:disabled){background:#5fff3a;transform:scale(1.05)}.bs:disabled{opacity:.3;cursor:not-allowed}
 
-@media(max-width:768px){.app{grid-template-columns:1fr}.sb{display:none}.mb{max-width:85%}}
+@media(max-width:768px){.app{grid-template-columns:1fr}.sb{display:none}}
 </style>
 </head>
 <body>
 
-<!-- ENTRY -->
 <div class="ov" id="ov">
-  <div class="cd">
-    <div class="ico">🔐</div>
-    <h1>KRYPTOCHAT</h1>
-    <p class="sub">Double Ratchet Verschlüsselung.<br>Der Server-Besitzer kann nichts lesen.</p>
-    <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
-    <button class="btn" id="jbtn">VERBINDEN</button>
-    <div class="st" id="jst"></div>
-    <div class="info">
-      <p>
-        <span class="d">●</span> Gleicher Raumname = gleicher Chat<br>
-        <span class="d">●</span> Raumname wird gehasht — Server sieht ihn nie<br>
-        <span class="d">●</span> Jede Nachricht = eigener Schlüssel (PFS)<br>
-        <span class="d">●</span> Replay-Angriffe werden erkannt & blockiert<br>
-        <span class="d">●</span> Nachrichtenlängen werden maskiert (Padding)<br>
-        <span class="d">●</span> Kein Logging, kein Speicher auf dem Server
-      </p>
-    </div>
-  </div>
+<div class="cd">
+  <div class="ico">🔐</div>
+  <h1>KRYPTOCHAT</h1>
+  <p class="sub">Double Ratchet Verschlüsselung</p>
+  <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
+  <button class="btn" id="jbtn">VERBINDEN</button>
+  <div class="st" id="jst"></div>
+  <div class="dbg" id="dbg"></div>
+  <div class="info"><p>
+    <span style="color:var(--gn-d)">●</span> Gleicher Raumname = gleicher Chat<br>
+    <span style="color:var(--gn-d)">●</span> Server sieht nur Rauschen<br>
+    <span style="color:var(--gn-d)">●</span> Jede Nachricht hat einen eigenen Schlüssel
+  </p></div>
+</div>
 </div>
 
-<!-- FINGERPRINT -->
 <div class="fp" id="fpm">
-  <div class="fp-c">
-    <h3>🔐 Schlüssel verifizieren</h3>
-    <p class="fp-sub">Vergleiche diesen Code mit deinem Partner über einen sicheren Kanal (Telefon, persönlich).</p>
-    <div class="fp-grid">
-      <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
-      <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
-    </div>
-    <div class="fp-a">
-      <button class="y" id="fpy">✓ VERIFIZIERT</button>
-      <button class="n" id="fpn">ABBRECHEN</button>
-    </div>
+<div class="fp-c">
+  <h3>🔐 Schlüssel verifizieren</h3>
+  <p class="fp-sub">Vergleiche mit deinem Partner über einen sicheren Kanal.</p>
+  <div class="fp-grid">
+    <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
+    <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
+  </div>
+  <div class="fp-a">
+    <button class="y" id="fpy">✓ VERIFIZIERT</button>
+    <button class="n" id="fpn">ABBRECHEN</button>
   </div>
 </div>
+</div>
 
-<!-- APP -->
 <div class="app" id="app">
-  <aside class="sb">
-    <div class="sb-h"><div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div></div>
-    <div class="sb-s"><h4>Raum</h4><div class="id-d" id="drm" style="text-align:center;letter-spacing:1px">—</div></div>
-    <div class="sb-s"><h4>Deine ID</h4><div class="id-d" id="mid">—</div></div>
-    <div class="sb-s">
-      <h4>Sicherheit (PFS)</h4>
-      <div class="st-b"><div class="sl">Aktive Ratchets</div><div class="sv c" id="sr">0</div></div>
-      <div class="st-b"><div class="sl">Nachrichten</div><div class="sv g" id="sm">0</div></div>
-      <div class="st-b"><div class="sl">Root Rotationen</div><div class="sv a" id="sk">0</div></div>
-      <div class="st-b"><div class="sl">Replays blockiert</div><div class="sv" id="sb" style="color:var(--t2)">0</div></div>
+<aside class="sb">
+  <div class="sb-h"><div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div></div>
+  <div class="sb-s"><h4>Deine ID</h4><div class="id-d" id="mid">—</div></div>
+  <div class="sb-s"><h4>Raum</h4><div class="id-d" id="drm" style="text-align:center">—</div></div>
+  <div class="sb-s"><h4>Statistik</h4>
+    <div class="st-b"><div class="sl">Nachrichten</div><div class="sv g" id="sm">0</div></div>
+    <div class="st-b"><div class="sl">Ratchet-Rotationen</div><div class="sv c" id="sr">0</div></div>
+  </div>
+  <div class="sb-s"><h4>Peers</h4><ul class="p-l" id="pl"><li style="font-family:var(--fm);font-size:11px;color:var(--t3)">Warte...</li></ul></div>
+  <div class="sn"><p>
+    <span style="color:var(--gn-d)">●</span> Double Ratchet<br>
+    <span style="color:var(--gn-d)">●</span> X25519 + XSalsa20-Poly1305<br>
+    <span style="color:var(--gn-d)">●</span> Perfect Forward Secrecy
+  </p></div>
+</aside>
+<main class="cm">
+  <div class="ch">
+    <div class="ch-l"><h2 id="ct">Kryptochat</h2><div class="eb"><span class="dot"></span> E2E verschlüsselt</div></div>
+    <div class="oc"><span id="onc">1</span> online</div>
+  </div>
+  <div class="mc" id="mc">
+    <div class="es" id="es"><div class="ei">🔐</div><p>Sobald ein Peer beitritt,<br>startet der Double Ratchet automatisch.</p></div>
+  </div>
+  <div class="ia">
+    <div class="iw">
+      <textarea class="mn" id="min" placeholder="Verbinde zuerst..." rows="1" disabled></textarea>
+      <button class="bs" id="sbtn" disabled>↑</button>
     </div>
-    <div class="sb-s"><h4>Verbundene Nutzer</h4><ul class="p-l" id="pl"><li style="font-family:var(--fm);font-size:11px;color:var(--t3)">Warte...</li></ul></div>
-    <div class="sn"><p>
-      <span class="ni">●</span> Double Ratchet (Signal-Protokoll)<br>
-      <span class="ni">●</span> X25519 + HKDF-SHA256<br>
-      <span class="ni">●</span> XSalsa20-Poly1305 pro Nachricht<br>
-      <span class="ni">●</span> Nachrichten-Padding (512B)<br>
-      <span class="ni">●</span> Replay-Angriffs-Schutz<br>
-      <span class="ni">●</span> Raumname-Hashing
-    </p></div>
-  </aside>
-  <main class="cm">
-    <div class="ch">
-      <div class="ch-l"><h2 id="ct">Kryptochat</h2><div class="eb"><span class="dot"></span> Double Ratchet E2E</div></div>
-      <div class="oc"><span id="onc">1</span> online</div>
+    <div style="display:flex;justify-content:space-between;margin-top:6px;padding:0 2px">
+      <span style="font-family:var(--fm);font-size:9px;color:var(--t3)">Shift+Enter = neue Zeile</span>
+      <span id="est" style="font-family:var(--fm);font-size:9px;color:var(--t3)">Getrennt</span>
     </div>
-    <div class="mc" id="mc">
-      <div class="es" id="es"><div class="ei">🔐</div><p>Jede Nachricht hat einen eigenen Schlüssel.<br>Vergangene Nachrichten sind sicher, selbst wenn<br>ein zukünftiger Schlüssel kompromittiert wird.</p></div>
-    </div>
-    <div class="ia">
-      <div class="iw">
-        <textarea class="mn" id="min" placeholder="Verschlüsselte Nachricht..." rows="1" disabled></textarea>
-        <button class="bs" id="sbtn" disabled>↑</button>
-      </div>
-      <div class="ih"><span>Shift+Enter für neue Zeile</span><span id="est">Getrennt</span></div>
-    </div>
-  </main>
+  </div>
+</main>
 </div>
 
 <script>
-// ================================================================
-//  KRYPTOCHAT CLIENT — Double Ratchet E2E
-// ================================================================
-//  Schutzmaßnahmen:
-//  • Double Ratchet: Perfect Forward Secrecy + Post-Compromise Security
-//  • Nachrichten-Padding: feste Blöcke (512 Byte) — Längenanalyse unmöglich
-//  • Replay-Schutz: Nonce + Index-Tracking pro Peer
-//  • Raumname-Hashing: Server sieht nur SHA-256-Hash
-//  • Anonyme IDs: kryptografisch zufällig
-// ================================================================
+// ============================================
+// DEBUG LOG
+// ============================================
+const dbgEl = document.getElementById('dbg');
+function log(msg, type) {
+  const d = new Date().toLocaleTimeString('de-DE');
+  const line = document.createElement('div');
+  line.className = type || '';
+  line.textContent = `[${d}] ${msg}`;
+  dbgEl.appendChild(line);
+  dbgEl.scrollTop = dbgEl.scrollHeight;
+  console.log(`[${d}] ${msg}`);
+}
 
+// ============================================
+// GLOBAL ERROR CAPTURE
+// ============================================
+window.onerror = function(msg, src, line, col, err) {
+  log(`FEHLER: ${msg} (${line}:${col})`, 'no');
+  return false;
+};
+
+// ============================================
+// CHECK: TweetNaCl geladen?
+// ============================================
+if (typeof nacl === 'undefined') {
+  log('TweetNaCl NICHT geladen! CDN blockiert?', 'no');
+  document.getElementById('jst').textContent = 'Bibliothek nicht geladen! Seite neu laden.';
+} else {
+  log('TweetNaCl geladen ✓', 'ok');
+}
+
+// ============================================
+// HELPERS
+// ============================================
 const $ = id => document.getElementById(id);
-
-// ====== HILFSFUNKTIONEN ======
-const B64 = {
-  enc: u => btoa(String.fromCharCode(...u)),
-  dec: s => new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0)))
-};
-const U8 = {
-  enc: t => new TextEncoder().encode(t),
-  dec: u => new TextDecoder().decode(u)
-};
+const B64 = { enc: u => btoa(String.fromCharCode(...u)), dec: s => new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0))) };
+const U8 = { enc: t => new TextEncoder().encode(t), dec: u => new TextDecoder().decode(u) };
 const uid = () => B64.enc(nacl.randomBytes(8)).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12);
 const arrEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
-// ====== NACHRICHTEN-PADDING ======
-// Feste Blockgrößen: Server kann nicht an Länge erkennen ob "ja", "Nein" oder ein Roman
-const PAD_SIZES = [256, 512, 1024, 2048];
+// ============================================
+// PADDING (maskiert Nachrichtenlängen)
+// ============================================
+const PAD = [256, 512, 1024, 2048];
 
-function padMessage(text) {
+function padMsg(text) {
   const plain = U8.enc(text);
-  const target = PAD_SIZES.find(s => s >= plain.length + 4) || PAD_SIZES[PAD_SIZES.length - 1];
+  const target = PAD.find(s => s >= plain.length + 4) || PAD[PAD.length - 1];
   const padded = new Uint8Array(target);
-  // Bytes 0-3: Original-Länge (Big Endian)
   padded[0] = (plain.length >> 24) & 0xFF;
   padded[1] = (plain.length >> 16) & 0xFF;
   padded[2] = (plain.length >> 8) & 0xFF;
   padded[3] = plain.length & 0xFF;
   padded.set(plain, 4);
-  // Rest: kryptografischer Zufall
-  if (target > plain.length + 4) {
-    padded.set(nacl.randomBytes(target - plain.length - 4), plain.length + 4);
-  }
+  if (target > plain.length + 4) padded.set(nacl.randomBytes(target - plain.length - 4), plain.length + 4);
   return padded;
 }
 
-function unpadMessage(padded) {
+function unpadMsg(padded) {
   const len = (padded[0] << 24) | (padded[1] << 16) | (padded[2] << 8) | padded[3];
   if (len < 0 || len > padded.length - 4) return null;
   return U8.dec(padded.slice(4, 4 + len));
 }
 
-// ====== KRYPTO ======
+// ============================================
+// KRYPTO
+// ============================================
 async function hmac(k, d) {
   const key = await crypto.subtle.importKey('raw', k, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   return new Uint8Array(await crypto.subtle.sign('HMAC', key, d));
@@ -283,121 +262,80 @@ async function hkdfExp(prk, info, len) {
 }
 async function kdfChain(ck) {
   return {
-    next: await hmac(ck, U8.enc('KC_CHAIN_v2')),
-    msgKey: await hmac(ck, U8.enc('KC_MSG_v2'))
+    next: await hmac(ck, U8.enc('KC_CHAIN')),
+    msgKey: await hmac(ck, U8.enc('KC_MSG'))
   };
 }
-async function deriveEncKey(mk) {
-  return await hkdfExp(mk, U8.enc('KC_ENC_v2'), 32);
-}
-function fingerprint(pub) {
+async function deriveKey(mk) { return await hkdfExp(mk, U8.enc('KC_ENC'), 32); }
+function fp(pub) {
   const h = nacl.hash(pub);
   return Array.from(h.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
 }
 
-// ====== DOUBLE RATCHET ======
-
-// DH-Ratchet-Schritt
+// ============================================
+// DOUBLE RATCHET
+// ============================================
 async function dhRatchet(st, remoteRP) {
   const dh = nacl.scalarMult(st.dhPair.secretKey, remoteRP);
   const prk = await hkdfExt(dh, st.rootKey);
-  st.rootKey = await hkdfExp(prk, U8.enc('KC_ROOT_v2'), 32);
-  st.recvChainKey = await hkdfExp(prk, U8.enc('KC_RECV_v2'), 32);
+  st.rootKey = await hkdfExp(prk, U8.enc('KC_ROOT'), 32);
+  st.recvChainKey = await hkdfExp(prk, U8.enc('KC_RECV'), 32);
   st.dhPair = nacl.box.keyPair();
   st.remoteRatchetPub = remoteRP;
   st.recvIdx = 0;
   st.rootRotations++;
+  log('DH-Ratchet durchgeführt', 'ok');
 }
 
-// Sender initialisieren (A nach empfangen von B's Ratchet Key)
 async function initSender(shared, remoteRP) {
-  const rootKey = await hkdfExt(shared, U8.enc('KC_INIT_v2'));
+  const rootKey = await hkdfExt(shared, U8.enc('KC_INIT'));
   const dhPair = nacl.box.keyPair();
   const prk = await hkdfExt(dhPair.publicKey, rootKey);
-  const sendChainKey = await hkdfExp(prk, U8.enc('KC_SEND_v2'), 32);
-  return {
-    rootKey, dhPair,
-    remoteRatchetPub: remoteRP,
-    sendChainKey, recvChainKey: null,
-    sendIdx: 0, recvIdx: 0,
-    skipped: new Map(),
-    usedNonces: new Set(),
-    rootRotations: 0
-  };
+  const sendChainKey = await hkdfExp(prk, U8.enc('KC_SEND'), 32);
+  return { rootKey, dhPair, remoteRatchetPub: remoteRP, sendChainKey, recvChainKey: null, sendIdx: 0, recvIdx: 0, skipped: new Map(), usedNonces: new Set(), rootRotations: 0 };
 }
 
-// Empfänger initialisieren (B nach empfangen von A's Ratchet Key)
 async function initReceiver(shared, peerRP) {
-  const rootKey = await hkdfExt(shared, U8.enc('KC_INIT_v2'));
+  const rootKey = await hkdfExt(shared, U8.enc('KC_INIT'));
   const prk = await hkdfExt(peerRP, rootKey);
-  const recvChainKey = await hkdfExp(prk, U8.enc('KC_RECV_v2'), 32);
-  return {
-    rootKey, dhPair: nacl.box.keyPair(),
-    remoteRatchetPub: peerRP,
-    sendChainKey: null, recvChainKey,
-    sendIdx: 0, recvIdx: 0,
-    skipped: new Map(),
-    usedNonces: new Set(),
-    rootRotations: 0
-  };
+  const recvChainKey = await hkdfExp(prk, U8.enc('KC_RECV'), 32);
+  return { rootKey, dhPair: nacl.box.keyPair(), remoteRatchetPub: peerRP, sendChainKey: null, recvChainKey, sendIdx: 0, recvIdx: 0, skipped: new Map(), usedNonces: new Set(), rootRotations: 0 };
 }
 
-// Nachricht verschlüsseln
 async function ratchetEncrypt(st, text) {
-  // 1. Message Key von Send-Chain ableiten
   const { next, msgKey } = await kdfChain(st.sendChainKey);
   st.sendChainKey = next;
-  const ek = await deriveEncKey(msgKey);
+  const ek = await deriveKey(msgKey);
   const si = st.sendIdx++;
-
-  // 2. Neues ephemeres KeyPair + DH-Ratchet
   const eph = nacl.box.keyPair();
   const dh = nacl.scalarMult(eph.secretKey, st.remoteRatchetPub);
   const prk = await hkdfExt(dh, st.rootKey);
-  st.rootKey = await hkdfExp(prk, U8.enc('KC_ROOT_v2'), 32);
-  st.sendChainKey = await hkdfExp(prk, U8.enc('KC_SEND_v2'), 32);
+  st.rootKey = await hkdfExp(prk, U8.enc('KC_ROOT'), 32);
+  st.sendChainKey = await hkdfExp(prk, U8.enc('KC_SEND'), 32);
   st.dhPair = eph;
   st.rootRotations++;
-
-  // 3. Nachricht padden und verschlüsseln
-  const padded = padMessage(text);
+  const padded = padMsg(text);
   const nonce = nacl.randomBytes(24);
   const ct = nacl.secretbox(padded, nonce, ek);
-
-  return {
-    rp: B64.enc(eph.publicKey),
-    i: si,
-    n: B64.enc(nonce),
-    c: B64.enc(ct)
-  };
+  return { rp: B64.enc(eph.publicKey), i: si, n: B64.enc(nonce), c: B64.enc(ct) };
 }
 
-// Nachricht entschlüsseln
 async function ratchetDecrypt(st, data) {
   const rp = B64.dec(data.rp);
   const nonce = B64.dec(data.n);
-  const nonceKey = B64.enc(nonce);
-
-  // Replay-Schutz: gleiche Nonce zweimal = Angriff
-  if (st.usedNonces.has(nonceKey)) {
-    return null;
-  }
-
-  // Übersprungene Keys prüfen
+  const nk = B64.enc(nonce);
+  if (st.usedNonces.has(nk)) { log('Replay blockiert!', 'no'); return null; }
   const sk = `${B64.enc(rp)}:${data.i}`;
   if (st.skipped.has(sk)) {
-    const mk = st.skipped.get(sk);
-    st.skipped.delete(sk);
-    const ek = await deriveEncKey(mk);
+    const mk = st.skipped.get(sk); st.skipped.delete(sk);
+    const ek = await deriveKey(mk);
     const pt = nacl.secretbox.open(B64.dec(data.c), nonce, ek);
     if (!pt) return null;
-    const text = unpadMessage(pt);
+    const text = unpadMsg(pt);
     if (!text) return null;
-    st.usedNonces.add(nonceKey);
+    st.usedNonces.add(nk);
     return { text, rotated: false };
   }
-
-  // DH-Ratchet wenn neuer Ratchet Key
   const needsRot = !st.remoteRatchetPub || !arrEq(rp, st.remoteRatchetPub);
   if (needsRot) {
     if (st.remoteRatchetPub && st.recvChainKey) {
@@ -410,8 +348,6 @@ async function ratchetDecrypt(st, data) {
     }
     await dhRatchet(st, rp);
   }
-
-  // Empfangs-Chain ratcheten (ggf. übersprungene Keys cachen)
   if (st.recvIdx < data.i) {
     let ck = st.recvChainKey;
     for (let i = st.recvIdx; i < data.i; i++) {
@@ -421,36 +357,33 @@ async function ratchetDecrypt(st, data) {
     }
     st.recvChainKey = ck;
   }
-
-  // Message Key ableiten
   const { next, msgKey } = await kdfChain(st.recvChainKey);
   st.recvChainKey = next;
   st.recvIdx = data.i + 1;
-
-  // Entschlüsseln + Depadden
-  const ek = await deriveEncKey(msgKey);
+  const ek = await deriveKey(msgKey);
   const pt = nacl.secretbox.open(B64.dec(data.c), nonce, ek);
-  if (!pt) return null;
-
-  const text = unpadMessage(pt);
-  if (!text) return null;
-
-  // Nonce merken (Replay-Schutz)
-  st.usedNonces.add(nonceKey);
-
+  if (!pt) { log('Entschlüsselung fehlgeschlagen!', 'no'); return null; }
+  const text = unpadMsg(pt);
+  if (!text) { log('Depadding fehlgeschlagen!', 'no'); return null; }
+  st.usedNonces.add(nk);
   return { text, rotated: needsRot };
 }
 
-// ====== APP STATE ======
+// ============================================
+// APP STATE
+// ============================================
 const myKeyPair = nacl.box.keyPair();
 const myRatchetPair = nacl.box.keyPair();
 const myUserId = uid();
 let ws = null, currentRoom = null, peers = new Map(), msgBuffers = new Map();
-let stats = { msgs: 0, rots: 0, blocked: 0 };
+let stats = { msgs: 0, rots: 0 };
 
 $('mid').textContent = myUserId;
+log(`Deine ID: ${myUserId}`, 'ok');
 
-// ====== WEBSOCKET ======
+// ============================================
+// WEBSOCKET
+// ============================================
 $('rin').addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
 $('jbtn').addEventListener('click', doJoin);
 
@@ -464,18 +397,27 @@ function doJoin() {
 }
 
 function connect(room) {
+  log(`Verbinde zu Raum: "${room}"`);
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(`${proto}//${location.host}`);
+  const url = `${proto}//${location.host}`;
+  log(`WebSocket: ${url}`);
+
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    log(`WS Fehler: ${e.message}`, 'no');
+    $('jst').textContent = 'Fehler!';
+    $('jbtn').disabled = false;
+    return;
+  }
 
   ws.onopen = () => {
-    $('jst').textContent = 'Double Ratchet wird eingerichtet...';
-    ws.send(JSON.stringify({
-      type: 'join',
-      room,
-      userId: myUserId,
-      pubKey: B64.enc(myKeyPair.publicKey),
-      ratchetPub: B64.enc(myRatchetPair.publicKey)
-    }));
+    log('WebSocket verbunden ✓', 'ok');
+    $('jst').textContent = 'Sende Beitritt...';
+    const joinMsg = { type: 'join', room, userId: myUserId, pubKey: B64.enc(myKeyPair.publicKey), ratchetPub: B64.enc(myRatchetPair.publicKey) };
+    ws.send(JSON.stringify(joinMsg));
+    log(`Beitritt gesendet für Raum "${room}"`, 'ok');
+
     setTimeout(() => {
       $('ov').classList.add('h');
       $('app').classList.add('v');
@@ -485,51 +427,70 @@ function connect(room) {
       $('sbtn').disabled = false;
       $('min').focus();
       updStatus();
-    }, 600);
+    }, 800);
   };
 
-  ws.onmessage = e => handleServerMsg(JSON.parse(e.data));
+  ws.onmessage = e => {
+    let msg;
+    try { msg = JSON.parse(e.data); } catch { return; }
+    log(`Empfangen: ${msg.type}`);
+    handleServerMsg(msg);
+  };
 
-  ws.onclose = () => {
-    addSysMsg('Verbindung verloren. Reconnecting...', false);
+  ws.onclose = (ev) => {
+    log(`WS geschlossen (code: ${ev.code})`, 'no');
+    ws = null;
     $('est').textContent = 'Getrennt';
     $('est').style.color = 'var(--rd)';
-    setTimeout(() => connect(currentRoom), 3000);
+    addSysMsg('Verbindung verloren — reconnecting...');
+    setTimeout(() => { if (currentRoom) connect(currentRoom); }, 3000);
   };
 
   ws.onerror = () => {
-    $('jst').textContent = 'Fehler!';
+    log('WS Fehler!', 'no');
+    $('jst').textContent = 'Verbindung fehlgeschlagen!';
     $('jbtn').disabled = false;
   };
 }
 
+// ============================================
+// MESSAGE HANDLING
+// ============================================
 async function handleServerMsg(msg) {
   if (msg.type === 'peers') {
+    log(`${msg.peers.length} existierende(r) Peer(s)`, 'ok');
     for (const p of msg.peers) {
+      log(`Peer ${p.id}: Key Exchange senden...`);
       const pubKey = B64.dec(p.pubKey);
       const ratchetPub = B64.dec(p.ratchetPub);
       const shared = nacl.box.before(pubKey, myKeyPair.secretKey);
       const rs = await initSender(shared, ratchetPub);
       peers.set(p.id, { pubKey, ratchetState: rs, verified: false });
-      ws.send(JSON.stringify({
+
+      const kxMsg = {
         type: 'ratchet-msg', from: myUserId, to: p.id,
         data: { type: 'key-exchange', pubKey: B64.enc(myKeyPair.publicKey), ratchetPub: B64.enc(rs.dhPair.publicKey) }
-      }));
+      };
+      ws.send(JSON.stringify(kxMsg));
+      log(`Key Exchange an ${p.id} gesendet`, 'ok');
     }
-    updPeers(); updStatus();
+    updPeers();
   }
 
   if (msg.type === 'ratchet-msg') {
     const d = msg.data;
 
     if (d.type === 'key-exchange') {
+      log(`Key Exchange von ${msg.from} empfangen`, 'ok');
       const pubKey = B64.dec(d.pubKey);
       const ratchetPub = B64.dec(d.ratchetPub);
       const shared = nacl.box.before(pubKey, myKeyPair.secretKey);
       const rs = await initReceiver(shared, ratchetPub);
       peers.set(msg.from, { pubKey, ratchetState: rs, verified: false });
+      log(`Ratchet für ${msg.from} initialisiert`, 'ok');
 
       if (msgBuffers.has(msg.from)) {
+        log(`${msgBuffers.get(msg.from.length)} gepufferte Nachrichten verarbeiten...`);
         for (const buf of msgBuffers.get(msg.from)) await processEncrypted(msg.from, buf);
         msgBuffers.delete(msg.from);
       }
@@ -538,7 +499,9 @@ async function handleServerMsg(msg) {
     }
 
     if (d.type === 'encrypted') {
+      log(`Verschlüsselte Nachricht von ${msg.from}`);
       if (!peers.has(msg.from)) {
+        log(`Peer ${msg.from} noch nicht bekannt — puffern`);
         if (!msgBuffers.has(msg.from)) msgBuffers.set(msg.from, []);
         msgBuffers.get(msg.from).push(d);
         return;
@@ -548,69 +511,72 @@ async function handleServerMsg(msg) {
   }
 
   if (msg.type === 'peer-left') {
+    log(`${msg.userId} hat verlassen`);
     peers.delete(msg.userId);
     msgBuffers.delete(msg.userId);
-    updPeers(); updStatus();
-    addSysMsg(`${msg.userId} hat verlassen`, false);
+    updPeers();
+    addSysMsg(`${msg.userId} hat verlassen`);
   }
 }
 
 async function processEncrypted(peerId, data) {
   const peer = peers.get(peerId);
-  if (!peer) return;
+  if (!peer) { log(`Peer ${peerId} nicht gefunden!`, 'no'); return; }
   try {
     const result = await ratchetDecrypt(peer.ratchetState, data);
     if (result) {
-      if (result.rotated) {
-        addSysMsg('⟳ Ratchet-Rotation', false, true);
-        stats.rots++;
-      }
+      if (result.rotated) { addSysMsg('⟳ Ratchet-Rotation', false, true); stats.rots++; }
       addMsg(peerId, result.text, false);
       stats.msgs++;
       updStats();
+      log(`Nachricht von ${peerId} entschlüsselt ✓`, 'ok');
     } else {
-      // Replay oder Manipulation erkannt
-      stats.blocked++;
-      updStats();
+      log(`Entschlüsselung NULL von ${peerId}`, 'no');
     }
   } catch (e) {
-    // Entschlüsselung fehlgeschlagen (Manipulation oder veralteter Key)
+    log(`Decrypt Fehler: ${e.message}`, 'no');
   }
 }
 
-// ====== SENDING ======
+// ============================================
+// SENDEN
+// ============================================
 $('sbtn').addEventListener('click', sendMsg);
-$('min').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); }
-});
-$('min').addEventListener('input', () => {
-  $('min').style.height = 'auto';
-  $('min').style.height = Math.min($('min').scrollHeight, 120) + 'px';
-});
+$('min').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMsg(); } });
+$('min').addEventListener('input', () => { $('min').style.height = 'auto'; $('min').style.height = Math.min($('min').scrollHeight, 120) + 'px'; });
 
 async function sendMsg() {
   const text = $('min').value.trim();
-  if (!text || peers.size === 0) return;
+  if (!text) return;
+  if (peers.size === 0) { log('Keine Peers verbunden!', 'no'); addSysMsg('Warte auf einen Peer...'); return; }
+  if (!ws || ws.readyState !== 1) { log('WS nicht verbunden!', 'no'); return; }
+
+  log(`Sende Nachricht an ${peers.size} Peer(s)...`);
 
   for (const [pid, peer] of peers) {
-    if (!peer.ratchetState.sendChainKey) {
-      const shared = nacl.box.before(peer.pubKey, myKeyPair.secretKey);
-      const rs = await initSender(shared, peer.ratchetState.remoteRatchetPub);
-      rs.recvChainKey = peer.ratchetState.recvChainKey;
-      rs.recvIdx = peer.ratchetState.recvIdx;
-      rs.skipped = peer.ratchetState.skipped;
-      rs.usedNonces = peer.ratchetState.usedNonces;
-      rs.rootRotations = peer.ratchetState.rootRotations;
-      peer.ratchetState = rs;
-    }
     try {
+      // Wenn kein Sender-State, erstellen
+      if (!peer.ratchetState.sendChainKey) {
+        log(`Erstelle Sender-State für ${pid}`);
+        const shared = nacl.box.before(peer.pubKey, myKeyPair.secretKey);
+        const rs = await initSender(shared, peer.ratchetState.remoteRatchetPub);
+        // Empfangs-State übernehmen
+        rs.recvChainKey = peer.ratchetState.recvChainKey;
+        rs.recvIdx = peer.ratchetState.recvIdx;
+        rs.skipped = peer.ratchetState.skipped;
+        rs.usedNonces = peer.ratchetState.usedNonces;
+        rs.rootRotations = peer.ratchetState.rootRotations;
+        peer.ratchetState = rs;
+      }
+
       const enc = await ratchetEncrypt(peer.ratchetState, text);
+      const outMsg = { type: 'ratchet-msg', from: myUserId, to: pid, data: { type: 'encrypted', ...enc } };
+      ws.send(JSON.stringify(outMsg));
       stats.msgs++; stats.rots++;
-      ws.send(JSON.stringify({
-        type: 'ratchet-msg', from: myUserId, to: pid,
-        data: { type: 'encrypted', ...enc }
-      }));
-    } catch (e) { /* Peer nicht bereit */ }
+      log(`Nachricht an ${pid} gesendet ✓`, 'ok');
+    } catch (e) {
+      log(`Senden an ${pid} fehlgeschlagen: ${e.message}`, 'no');
+    }
   }
 
   addMsg(myUserId, text, true);
@@ -620,14 +586,15 @@ async function sendMsg() {
   updStats();
 }
 
-// ====== UI ======
+// ============================================
+// UI
+// ============================================
 function addMsg(sender, text, out) {
   if ($('es')) $('es').remove();
   const g = document.createElement('div');
   g.className = `mg ${out ? 'out' : 'in'}`;
   const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  const icons = ['🔑', '🔐', '🛡️', '🔒'];
-  g.innerHTML = `${!out ? `<div class="ms">${esc(sender)}</div>` : ''}<div class="mb">${esc(text)}</div><div class="mm"><span class="mi-i">${icons[Math.floor(Math.random() * 4)]}</span><span class="mt">${t}</span></div>`;
+  g.innerHTML = `${!out ? `<div class="ms">${esc(sender)}</div>` : ''}<div class="mb">${esc(text)}</div><div class="mm"><span class="mt">${t}</span></div>`;
   $('mc').appendChild(g);
   $('mc').scrollTop = $('mc').scrollHeight;
 }
@@ -642,7 +609,7 @@ function addSysMsg(text, hl, rot) {
 
 function updPeers() {
   if (peers.size === 0) {
-    $('pl').innerHTML = '<li style="font-family:var(--fm);font-size:11px;color:var(--t3)">Warte auf Verbindungen...</li>';
+    $('pl').innerHTML = '<li style="font-family:var(--fm);font-size:11px;color:var(--t3)">Warte...</li>';
     $('onc').textContent = '1';
     return;
   }
@@ -651,7 +618,7 @@ function updPeers() {
   peers.forEach((p, id) => {
     const li = document.createElement('li');
     li.className = 'p-i';
-    li.innerHTML = `<div class="p-inf"><div class="sd ${p.verified ? '' : 'w'}"></div><span class="p-nm">${id}</span></div><button class="bv ${p.verified ? 'ok' : ''}" data-p="${id}">${p.verified ? '✓ OK' : '? VERIFY'}</button>`;
+    li.innerHTML = `<div class="p-inf"><div class="sd ${p.verified ? '' : 'w'}"></div><span class="p-nm">${id}</span></div><button class="bv ${p.verified ? 'ok' : ''}" data-p="${id}">${p.verified ? '✓' : '?'}</button>`;
     $('pl').appendChild(li);
     li.querySelector('.bv').addEventListener('click', () => showFp(id));
   });
@@ -660,12 +627,11 @@ function updPeers() {
 function showFp(pid) {
   const p = peers.get(pid);
   if (!p) return;
-  $('mfp').textContent = fingerprint(myKeyPair.publicKey);
-  $('pfp').textContent = fingerprint(p.pubKey);
+  $('mfp').textContent = fp(myKeyPair.publicKey);
+  $('pfp').textContent = fp(p.pubKey);
   fpm.classList.add('v');
   fpm.dataset.peer = pid;
 }
-
 $('fpy').addEventListener('click', () => {
   const pid = fpm.dataset.peer;
   if (pid && peers.has(pid)) { peers.get(pid).verified = true; updPeers(); }
@@ -682,9 +648,14 @@ function updStatus() {
 function updStats() {
   $('sm').textContent = stats.msgs;
   $('sr').textContent = stats.rots;
-  $('sk').textContent = [...peers.values()].reduce((s, p) => s + (p.ratchetState?.rootRotations || 0), 0);
-  $('sb').textContent = stats.blocked;
 }
+
+// ============================================
+// STARTUP CHECK
+// ============================================
+log(`Protokoll: ${location.protocol}`, 'ok');
+log(`Host: ${location.host}`, 'ok');
+log(`Bereit — Raumname eingeben`, 'ok');
 </script>
 </body>
 </html>
