@@ -4,16 +4,31 @@
 
 (() => {
 
-  // ── Guard: Prüfe ob alle Abhängigkeiten da sind ──
-  if (typeof nacl === 'undefined') {
-    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: TweetNaCl nicht geladen. Seite neu laden.</p>';
-    return;
-  }
-  if (typeof B64 === 'undefined' || typeof Crypto === 'undefined' ||
-      typeof Session === 'undefined' || typeof UI === 'undefined') {
-    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: Skripte nicht vollständig geladen.</p>';
-    return;
-  }
+// ── Guard: Prüfe ob alle Abhängigkeiten da sind ──
+if (typeof nacl === 'undefined') {
+  document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: TweetNaCl nicht geladen.</p>';
+  console.error('Fehlt: nacl');
+  return;
+}
+
+const _deps = {
+  B64: typeof B64,
+  Crypto: typeof Crypto,
+  Session: typeof Session,
+  UI: typeof UI,
+  $: typeof $,
+  uid: typeof uid,
+  U8: typeof U8,
+  esc: typeof esc
+};
+console.table(_deps);
+
+const missing = Object.entries(_deps).filter(([,v]) => v === 'undefined').map(([k]) => k);
+if (missing.length > 0) {
+  document.body.innerHTML = '<p style="color:red;padding:2rem">Fehlende Abhängigkeiten: ' + missing.join(', ') + '</p>';
+  console.error('Fehlend:', missing);
+  return;
+}
 
   // ── State ──
   const myKeys = Crypto.generateKeyPair();
