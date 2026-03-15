@@ -23,7 +23,7 @@ const server = http.createServer((req, res) => {
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   res.setHeader('Content-Security-Policy',
     "default-src 'self'; " +
-    "script-src 'self' https://cdn.jsdelivr.net; " +
+    "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
     "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; " +
     "font-src https://fonts.gstatic.com; " +
     "connect-src 'self' ws: wss:; " +
