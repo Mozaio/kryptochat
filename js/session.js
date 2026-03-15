@@ -46,19 +46,28 @@ const Session = (() => {
     }
   }
 
-  // ASYNC: nutzt SHA-512 via Web Crypto statt nacl.hash
+  // SHA-512: nutzt sha512() aus utils.js falls vorhanden,
+  // sonst Fallback auf crypto.subtle
+  function _hash(data) {
+    if (typeof sha512 === 'function') {
+      return sha512(data);
+    }
+    return crypto.subtle.digest('SHA-512', data).then(h => new Uint8Array(h));
+  }
+
   async function computeSharedSecret(peerId) {
     const session = sessions.get(peerId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return false;
     if (!_myLongTermPubKey) return false;
 
-    // DH
+    // Diffie-Hellman mit ephemeral Keys
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    // Binding: SHA-512(ephemeralShared ‖ myLongPub ‖ theirLongPub)
+    // Binding an Long-Term Keys:
+    // SHA-512(ephemeralShared ‖ myLongPub ‖ theirLongPub)
     const combined = new Uint8Array(
       ephemeralShared.length + _myLongTermPubKey.length + session.theirPubKey.length
     );
@@ -69,12 +78,11 @@ const Session = (() => {
       ephemeralShared.length + _myLongTermPubKey.length
     );
 
-    // SHA-512 via Web Crypto (deterministisch, nativ)
-    const fullHash = await sha512(combined);
+    const fullHash = await _hash(combined);
     session.sharedSecret = fullHash.slice(0, 32);
     session.established = true;
 
-    // Cleanup
+    // Aufräumen
     combined.fill(0);
     ephemeralShared.fill(0);
 
