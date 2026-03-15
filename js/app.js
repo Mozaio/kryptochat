@@ -4,31 +4,31 @@
 
 (() => {
 
-// ── Guard: Prüfe ob alle Abhängigkeiten da sind ──
-if (typeof nacl === 'undefined') {
-  document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: TweetNaCl nicht geladen.</p>';
-  console.error('Fehlt: nacl');
-  return;
-}
+  // ── Guard: Prüfe ob alle Abhängigkeiten da sind ──
+  const _deps = {
+    B64: typeof B64,
+    Crypto: typeof Crypto,
+    Session: typeof Session,
+    UI: typeof UI,
+    $: typeof $,
+    uid: typeof uid,
+    U8: typeof U8,
+    esc: typeof esc
+  };
+  console.table(_deps);
 
-const _deps = {
-  B64: typeof B64,
-  Crypto: typeof Crypto,
-  Session: typeof Session,
-  UI: typeof UI,
-  $: typeof $,
-  uid: typeof uid,
-  U8: typeof U8,
-  esc: typeof esc
-};
-console.table(_deps);
+  if (typeof nacl === 'undefined') {
+    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: TweetNaCl nicht geladen.</p>';
+    console.error('Fehlt: nacl');
+    return;
+  }
 
-const missing = Object.entries(_deps).filter(([,v]) => v === 'undefined').map(([k]) => k);
-if (missing.length > 0) {
-  document.body.innerHTML = '<p style="color:red;padding:2rem">Fehlende Abhängigkeiten: ' + missing.join(', ') + '</p>';
-  console.error('Fehlend:', missing);
-  return;
-}
+  const missing = Object.entries(_deps).filter(([,v]) => v === 'undefined').map(([k]) => k);
+  if (missing.length > 0) {
+    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehlende Abhängigkeiten: ' + missing.join(', ') + '</p>';
+    console.error('Fehlend:', missing);
+    return;
+  }
 
   // ── State ──
   const myKeys = Crypto.generateKeyPair();
@@ -73,6 +73,7 @@ if (missing.length > 0) {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     const url = `${proto}//${location.host}`;
     UI.log(`WS → ${url}`, 'inf');
+    console.log('[DEBUG] Verbinde zu:', url, 'Raum:', r);
 
     try {
       socket = new WebSocket(url);
@@ -84,6 +85,7 @@ if (missing.length > 0) {
 
     socket.onopen = () => {
       UI.log('WS ✓', 'ok');
+      console.log('[DEBUG] WS geöffnet, sende join');
       socket.send(JSON.stringify({
         type: 'join',
         room: r,
@@ -96,11 +98,13 @@ if (missing.length > 0) {
     socket.onmessage = e => {
       let msg;
       try { msg = JSON.parse(e.data); } catch { return; }
+      console.log('[DEBUG] RX:', JSON.stringify(msg).substring(0, 300));
       handleMessage(msg);
     };
 
     socket.onclose = ev => {
       UI.log(`WS closed (${ev.code})`, 'no');
+      console.log('[DEBUG] WS geschlossen, code:', ev.code);
       socket = null;
       $('est').textContent = 'Getrennt';
       $('est').style.color = 'var(--rd)';
@@ -114,6 +118,7 @@ if (missing.length > 0) {
 
     socket.onerror = () => {
       UI.log('WS error', 'no');
+      console.error('[DEBUG] WS Fehler');
       UI.setJoinStatus('Fehler!');
       UI.setJoinDisabled(false);
     };
@@ -128,6 +133,7 @@ if (missing.length > 0) {
     // ── Peer-Liste ──
     if (msg.type === 'peers') {
       UI.log(`← peers: ${msg.peers.length}`, msg.peers.length ? 'ok' : 'wr');
+      console.log('[DEBUG] Peer-Liste empfangen:', msg.peers.length, 'Peers');
       for (const p of msg.peers) {
         if (!p.pubKey) continue;
         const pubKey = B64.dec(p.pubKey);
@@ -141,6 +147,7 @@ if (missing.length > 0) {
     if (msg.type === 'peer-joined') {
       const p = msg.peer;
       UI.log(`← peer-joined: ${p.id}`, 'ok');
+      console.log('[DEBUG] Peer beigetreten:', p.id);
       if (p.pubKey) {
         Session.createSession(p.id, B64.dec(p.pubKey));
         sendKeyExchange(p.id);
@@ -151,6 +158,7 @@ if (missing.length > 0) {
     // ── Daten ──
     if (msg.type === 'msg' && msg.data) {
       const d = msg.data;
+      console.log('[DEBUG] Nachricht von', msg.from, 'Typ:', d.type);
 
       if (d.type === 'kx')       handleKeyExchange(msg.from, d);
       if (d.type === 'kx-response') handleKeyExchangeResponse(msg.from, d);
@@ -185,27 +193,29 @@ if (missing.length > 0) {
 
     Crypto.signKeyExchange(payload);
 
-    socket.send(JSON.stringify({
+    const msg = JSON.stringify({
       type: 'msg',
       from: myId,
       to: peerId,
       data: { type: 'kx', ...payload }
-    }));
+    });
+
+    console.log('[DEBUG] TX KX →', peerId, 'socket ready:', socket && socket.readyState);
+    socket.send(msg);
 
     UI.log(`KX (signed) → ${peerId}`, 'ok');
   }
 
   function handleKeyExchange(from, d) {
     UI.log(`← KX von ${from}`, 'ok');
+    console.log('[DEBUG] KX empfangen von:', from);
 
-    // Timestamp prüfen
     const age = Math.abs(Date.now() - d.timestamp);
     if (age > 30000) {
       UI.log(`KX von ${from} abgelaufen (${age}ms)`, 'wr');
       return;
     }
 
-    // Signatur prüfen
     if (!Crypto.verifyKeyExchange(d)) {
       UI.log(`⚠ KX Signatur von ${from} UNGÜLTIG!`, 'no');
       UI.addSystem(`⚠ Warnung: ${from} hat ungültige Signatur!`);
@@ -224,6 +234,7 @@ if (missing.length > 0) {
     session.theirEphemeralPub = ephemeralPubKey;
 
     if (Session.computeSharedSecret(from)) {
+      console.log('[DEBUG] Session etabliert mit:', from);
       UI.log(`Session mit ${from} etabliert`, 'ok');
       UI.addSystem(`${from} verbunden — verifiziere Fingerabdruck!`, true);
     }
@@ -256,6 +267,7 @@ if (missing.length > 0) {
 
   function handleKeyExchangeResponse(from, d) {
     UI.log(`← KX-Response von ${from}`, 'ok');
+    console.log('[DEBUG] KX-Response von:', from);
 
     if (Math.abs(Date.now() - d.timestamp) > 30000) return;
     if (!Crypto.verifyKeyExchange(d)) {
@@ -269,6 +281,7 @@ if (missing.length > 0) {
     session.theirEphemeralPub = B64.dec(d.ephemeralPubKey);
 
     if (Session.computeSharedSecret(from)) {
+      console.log('[DEBUG] Session vollständig mit:', from, 'established:', session.established);
       UI.log(`Session mit ${from} vollständig`, 'ok');
       UI.updatePeers(Session.getAll());
     }
@@ -279,9 +292,11 @@ if (missing.length > 0) {
   // ══════════════════════════════════════════
 
   function handleEncrypted(from, d) {
+    console.log('[DEBUG] ENC von:', from, 'Session exists:', !!Session.getSession(from));
     const session = Session.getSession(from);
     if (!session || !session.established) {
       UI.log(`ENC von ${from}, keine Session`, 'wr');
+      console.warn('[DEBUG] Keine Session mit', from, 'established:', session ? session.established : 'no session');
       return;
     }
 
@@ -297,11 +312,13 @@ if (missing.length > 0) {
 
       if (plaintext === null) {
         UI.log(`Decrypt failed von ${from}`, 'no');
+        console.error('[DEBUG] Decrypt fehlgeschlagen von:', from);
         return;
       }
 
       session.recvNonces.add(d.n);
       session.msgCount++;
+      console.log('[DEBUG] Nachricht empfangen von:', from, 'Text:', plaintext);
       UI.addMessage(from, plaintext, false);
       msgCount++;
       UI.updateStats(msgCount);
@@ -310,6 +327,7 @@ if (missing.length > 0) {
 
     } catch (e) {
       UI.log(`Decrypt error von ${from}: ${e.message}`, 'no');
+      console.error('[DEBUG] Decrypt error:', e);
     }
   }
 
@@ -332,12 +350,14 @@ if (missing.length > 0) {
 
     if (!socket || socket.readyState !== 1) {
       UI.log('WS nicht bereit', 'no');
+      console.warn('[DEBUG] WS nicht bereit, readyState:', socket ? socket.readyState : 'null');
       return;
     }
 
     const sessions = Session.getAll();
     if (sessions.size === 0) {
       UI.addSystem('Kein Peer verbunden');
+      console.warn('[DEBUG] Keine Sessions vorhanden');
       return;
     }
 
@@ -356,6 +376,7 @@ if (missing.length > 0) {
     for (const [pid, session] of sessions) {
       if (!session.established || !session.sharedSecret) {
         UI.log(`Session mit ${pid} nicht bereit`, 'wr');
+        console.warn('[DEBUG] Session mit', pid, 'nicht bereit. established:', session.established, 'sharedSecret:', !!session.sharedSecret);
         continue;
       }
 
@@ -364,22 +385,30 @@ if (missing.length > 0) {
         session.sendNonce++;
 
         const encrypted = Crypto.encryptWithSession(text, session.sharedSecret, nonce);
-        if (!encrypted) continue;
+        if (!encrypted) {
+          console.error('[DEBUG] Verschlüsselung fehlgeschlagen für:', pid);
+          continue;
+        }
 
-        socket.send(JSON.stringify({
+        const msg = JSON.stringify({
           type: 'msg',
           from: myId,
           to: pid,
           data: { type: 'enc', n: B64.enc(nonce), c: B64.enc(encrypted) }
-        }));
+        });
+
+        console.log('[DEBUG] TX ENC →', pid, 'socket ready:', socket.readyState);
+        socket.send(msg);
         sent++;
         session.msgCount++;
 
       } catch (e) {
         UI.log(`Send error ${pid}: ${e.message}`, 'no');
+        console.error('[DEBUG] Send error:', pid, e);
       }
     }
 
+    console.log('[DEBUG] Nachricht gesendet an', sent, 'Peers');
     if (sent > 0) {
       UI.addMessage(myId, text, true);
       msgCount++;
@@ -401,12 +430,10 @@ if (missing.length > 0) {
   }
 
   function handleRotationRequest(from, d) {
-    // Peer will rotieren — akzeptieren und neuen KX senden
     UI.log(`← Rotation von ${from}`, 'inf');
     const session = Session.getSession(from);
     if (session) {
       session.msgCount = 0;
-      // Neue ephemeral Keys werden beim nächsten KX erzeugt
     }
   }
 
@@ -431,7 +458,6 @@ if (missing.length > 0) {
       UI.log(`${peerId} verifiziert ✓`, 'ok');
       UI.updatePeers(Session.getAll());
 
-      // Prüfe ob alle Peers verifiziert sind
       let allVerified = true;
       Session.getAll().forEach(s => { if (!s.verified) allVerified = false; });
       if (allVerified) {
@@ -444,5 +470,6 @@ if (missing.length > 0) {
 
   $('fpn').addEventListener('click', () => UI.hideFingerprint());
 
+  console.log('[DEBUG] App initialisiert. MyID:', myId);
   UI.log('Bereit', 'ok');
 })();
