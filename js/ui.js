@@ -1,147 +1,134 @@
 /* ═══════════════════════════════════════════
-   ui.js — DOM-Interaktion & Anzeige
+   ui.js — DOM-Manipulation & Rendering
    ═══════════════════════════════════════════ */
 
 const UI = (() => {
 
-  let logVisible = false;
-
-  // ── Log ──
   function log(msg, cls) {
-    const el = $('log');
-    if (!el) return;
+    const logEl = $('log');
+    if (!logEl) return;
+    const t = new Date().toLocaleTimeString('de-DE');
     const d = document.createElement('div');
-    d.className = 'lo ' + (cls || '');
-    d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-    el.appendChild(d);
-    el.scrollTop = el.scrollHeight;
+    d.className = cls || '';
+    d.textContent = `[${t}] ${msg}`;
+    logEl.appendChild(d);
+    logEl.scrollTop = logEl.scrollHeight;
   }
 
   function initLogToggle() {
     const btn = $('toglog');
-    const el = $('log');
-    if (!btn || !el) return;
-    el.style.display = 'none';
-    btn.addEventListener('click', () => {
-      logVisible = !logVisible;
-      el.style.display = logVisible ? 'block' : 'none';
-      btn.textContent = logVisible ? 'LOG ✕' : 'LOG';
-    });
+    if (btn) btn.addEventListener('click', () => $('log').classList.toggle('show'));
   }
 
-  // ── Join-Status ──
-  function setJoinStatus(text) {
-    const el = $('jst');
-    if (el) el.textContent = text;
+  function scrollToBottom() {
+    const mc = $('mc');
+    if (mc) requestAnimationFrame(() => { mc.scrollTop = mc.scrollHeight; });
   }
 
-  function setJoinDisabled(disabled) {
-    const btn = $('jbtn');
-    const inp = $('rin');
-    if (btn) btn.disabled = disabled;
-    if (inp) inp.disabled = disabled;
-  }
-
-  function showRoom(name) {
-    const overlay = $('ov');
-    const app = $('app');
-    const drm = $('drm');
-    const ct = $('ct');
-    if (overlay) overlay.style.display = 'none';
-    if (app) app.style.display = 'grid';
-    if (drm) drm.textContent = name;
-    if (ct) ct.textContent = name;
-    const inp = $('min');
-    if (inp) { inp.disabled = false; inp.placeholder = 'Nachricht schreiben...'; }
-    const btn = $('sbtn');
-    if (btn) btn.disabled = false;
-  }
-
-  // ── System-Nachricht ──
-  function addSystem(text, important) {
-    const container = $('mc');
-    if (!container) return;
+  function addMessage(sender, text, isOutgoing) {
     const es = $('es');
     if (es) es.remove();
 
+    const g = document.createElement('div');
+    g.className = `mg ${isOutgoing ? 'out' : 'in'}`;
+    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+
+    g.innerHTML = `
+      ${!isOutgoing ? `<div class="ms">${esc(sender)}</div>` : ''}
+      <div class="mb">${esc(text)}</div>
+      <div class="mm"><span class="mt">${t}</span></div>
+    `;
+
+    $('mc').appendChild(g);
+    scrollToBottom();
+  }
+
+  function addSystem(text, highlight) {
     const d = document.createElement('div');
-    d.className = 'sy' + (important ? ' im' : '');
-    d.textContent = text;
-    container.appendChild(d);
-    container.scrollTop = container.scrollHeight;
+    d.className = `mg sys ${highlight ? 'h' : ''}`;
+    d.innerHTML = `<span>${text}</span>`;
+    $('mc').appendChild(d);
+    scrollToBottom();
   }
 
-  // ── Chat-Nachricht ──
-  function addMessage(peerId, text, isMine) {
-    const container = $('mc');
-    if (!container) return;
-    const es = $('es');
-    if (es) es.remove();
-
-    const wrap = document.createElement('div');
-    wrap.className = 'mg' + (isMine ? ' me' : '');
-
-    const sender = document.createElement('div');
-    sender.className = 'mg-s';
-    sender.textContent = isMine ? 'Du' : peerId;
-
-    const body = document.createElement('div');
-    body.className = 'mg-b';
-    body.textContent = text;
-
-    const time = document.createElement('div');
-    time.className = 'mg-t';
-    time.textContent = new Date().toLocaleTimeString();
-
-    wrap.appendChild(sender);
-    wrap.appendChild(body);
-    wrap.appendChild(time);
-    container.appendChild(wrap);
-    container.scrollTop = container.scrollHeight;
-  }
-
-  // ── Peers (dein Code, in UI-Objekt eingebaut) ──
   function updatePeers(sessionsMap) {
     const pl = $('pl');
     if (!pl) return;
 
     if (sessionsMap.size === 0) {
       pl.innerHTML = '<li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li>';
-      const onc = $('onc');
-      const est = $('est');
-      if (onc) onc.textContent = '1';
-      if (est) { est.textContent = 'Getrennt'; est.style.color = 'var(--am)'; }
+      $('onc').textContent = '1';
+      $('est').textContent = 'Getrennt';
+      $('est').style.color = 'var(--am)';
       return;
     }
 
-    const onc = $('onc');
-    const est = $('est');
-    if (onc) onc.textContent = sessionsMap.size + 1;
-    if (est) { est.textContent = sessionsMap.size + ' Peer(s)'; est.style.color = 'var(--gn)'; }
+    $('onc').textContent = sessionsMap.size + 1;
+    $('est').textContent = sessionsMap.size + ' Peer(s)';
+    $('est').style.color = 'var(--gn)';
 
     pl.innerHTML = '';
     sessionsMap.forEach((s, id) => {
       const li = document.createElement('li');
       li.className = 'p-i';
 
-      let statusDot = 'sd';
-      let statusText = '?';
-      let btnClass = 'bv';
-      if (s.verified) {
-        statusDot = 'sd';
-        statusText = '✓';
-        btnClass = 'bv ok';
-      } else if (s.established) {
-        statusDot = 'sd w';
-        statusText = '⚠';
-      } else {
-        statusDot = 'sd w';
-        statusText = '?';
-      }
+      let dotClass = s.verified ? 'sd' : 'sd w';
+      let btnLabel = s.verified ? '✓' : (s.established ? '⚠' : '?');
+      let btnClass = s.verified ? 'bv ok' : 'bv';
 
       li.innerHTML = `
         <div class="p-inf">
-          <div class="${statusDot}"></div>
+          <div class="${dotClass}"></div>
           <span class="p-nm">${id}</span>
         </div>
-        <
+        <button class="${btnClass}" data-p="${id}">${btnLabel}</button>
+      `;
+      pl.appendChild(li);
+    });
+  }
+
+  function showFingerprint(myPubKey, peerPubKey, peerId) {
+    $('mfp').textContent = Crypto.fingerprint(myPubKey);
+    $('pfp').textContent = Crypto.fingerprint(peerPubKey);
+    $('fpm').dataset.peer = peerId;
+    $('fpm').classList.add('v');
+  }
+
+  function hideFingerprint() {
+    $('fpm').classList.remove('v');
+  }
+
+  function updateStats(count) {
+    $('sm').textContent = count;
+  }
+
+  function showRoom(roomName) {
+    $('ov').classList.add('h');
+    $('app').classList.add('v');
+    $('drm').textContent = roomName;
+    $('ct').textContent = '#' + roomName;
+    $('min').disabled = false;
+    $('sbtn').disabled = false;
+    $('min').focus();
+    $('est').textContent = 'Verbunden';
+    $('est').style.color = 'var(--gn)';
+  }
+
+  function setJoinStatus(text) {
+    const el = $('jst');
+    if (el) el.textContent = text;
+  }
+
+  function setJoinDisabled(disabled) {
+    const el = $('jbtn');
+    if (el) el.disabled = disabled;
+  }
+
+  return {
+    log, initLogToggle, scrollToBottom,
+    addMessage, addSystem,
+    updatePeers, showFingerprint, hideFingerprint,
+    updateStats, showRoom,
+    setJoinStatus, setJoinDisabled
+  };
+})();
