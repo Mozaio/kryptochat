@@ -4,7 +4,6 @@
 
 const Crypto = (() => {
 
-  // ── Signing Key Pair (wird beim ersten Aufruf erzeugt) ──
   let _signingKeys = null;
 
   function _ensureSigningKeys() {
@@ -27,7 +26,6 @@ const Crypto = (() => {
       .join(' ');
   }
 
-  // ── Signierter Fingerprint ──
   function signedFingerprint(pubKey) {
     const sk = _ensureSigningKeys();
     const fp = nacl.hash(pubKey).slice(0, 12);
@@ -50,32 +48,37 @@ const Crypto = (() => {
     }
   }
 
-  // ── Encrypt / Decrypt mit Session Key (shared secret) ──
   function encryptWithSession(plaintext, sharedSecret, nonce) {
     const data = U8.enc(plaintext);
-    return nacl.secretbox(data, nonce, sharedSecret);
+    const result = nacl.secretbox(data, nonce, sharedSecret);
+    if (result) {
+      const hexSecret = Array.from(sharedSecret.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+      const hexNonce = Array.from(nonce.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+      console.log('[ENC] secret:', hexSecret, 'nonce:', hexNonce, 'ptLen:', data.length, 'ctLen:', result.length);
+    }
+    return result;
   }
 
   function decryptWithSession(ciphertext, nonce, sharedSecret) {
+    const hexSecret = Array.from(sharedSecret.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const hexNonce = Array.from(nonce.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('[DEC] secret:', hexSecret, 'nonce:', hexNonce, 'ctLen:', ciphertext.length);
     const plain = nacl.secretbox.open(ciphertext, nonce, sharedSecret);
+    console.log('[DEC] result:', plain === null ? 'FAILED' : 'OK, len=' + plain.length);
     if (plain === null) return null;
     return U8.dec(plain);
   }
 
-  // ── Monotoner Nonce ──
   function monotonicNonce(counter) {
     const nonce = new Uint8Array(24);
-    // Random füllen
     const rand = nacl.randomBytes(24);
     nonce.set(rand);
-    // Counter in die ersten 8 Bytes schreiben (Big-Endian)
     const view = new DataView(nonce.buffer);
     const bigCounter = typeof counter === 'bigint' ? counter : BigInt(counter);
     view.setBigUint64(0, bigCounter, false);
     return nonce;
   }
 
-  // ── Key Exchange signieren ──
   function signKeyExchange(payload) {
     const sk = _ensureSigningKeys();
     const data = U8.enc(JSON.stringify({
