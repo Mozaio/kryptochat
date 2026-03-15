@@ -9,20 +9,13 @@ const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'application/javascript',
   '.css': 'text/css',
-  '.json': 'application/json',
-  '.png': 'image/png'
+  '.json': 'application/json'
 };
 
 const server = http.createServer((req, res) => {
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('Referrer-Policy', 'no-referrer');
-
   const urlPath = req.url.split('?')[0];
   const filePath = path.join(__dirname, urlPath === '/' ? 'index.html' : urlPath);
-
   if (!filePath.startsWith(__dirname)) { res.writeHead(403); res.end(); return; }
-
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
     res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
@@ -31,15 +24,15 @@ const server = http.createServer((req, res) => {
 });
 
 const wss = new WebSocketServer({ server });
-const activeRooms = new Map();
+const rooms = new Map();
 
 function hashRoom(name) {
-  return crypto.createHash('sha256').update('kc_v2:' + name).digest('hex');
+  return crypto.createHash('sha256').update('kc:' + name).digest('hex');
 }
 
 wss.on('connection', (ws) => {
   let roomId = null;
-  let user = null;
+  let userId = null;
 
   ws.on('message', (raw) => {
     let msg;
@@ -47,44 +40,51 @@ wss.on('connection', (ws) => {
 
     if (msg.type === 'join') {
       roomId = hashRoom(msg.room);
-      user = { id: msg.userId, pubKey: msg.pubKey, ratchetPub: msg.ratchetPub, ws };
+      userId = msg.userId;
 
-      if (!activeRooms.has(roomId)) activeRooms.set(roomId, new Map());
-      const room = activeRooms.get(roomId);
+      if (!rooms.has(roomId)) rooms.set(roomId, new Map());
+      const room = rooms.get(roomId);
 
+      // Existierende Peers an neuen User
       const peers = [];
-      room.forEach(p => peers.push({ id: p.id, pubKey: p.pubKey, ratchetPub: p.ratchetPub }));
+      room.forEach((p) => {
+        peers.push({ id: p.id, pubKey: p.pubKey, ratchetPub: p.ratchetPub });
+      });
       ws.send(JSON.stringify({ type: 'peers', peers }));
 
-      room.set(user.id, user);
-      console.log(`[${msg.room.substring(0, 8)}...] ${user.id} joined (${room.size} total)`);
+      room.set(userId, { id: userId, pubKey: msg.pubKey, ratchetPub: msg.ratchetPub, ws });
+      console.log(`[${msg.room}] ${userId} joined (${room.size} peers)`);
     }
 
-    if (msg.type === 'ratchet-msg') {
-      const room = activeRooms.get(roomId);
-      if (!room) { console.log('Room not found!'); return; }
+    if (msg.type === 'msg') {
+      const room = rooms.get(roomId);
+      if (!room) return;
       const target = room.get(msg.to);
       if (target && target.ws.readyState === 1) {
-        target.ws.send(JSON.stringify({ type: 'ratchet-msg', from: msg.from, data: msg.data }));
-        console.log(`Message routed: ${msg.from} -> ${msg.to}`);
-      } else {
-        console.log(`Target not found: ${msg.to} in room. Available: ${[...room.keys()].join(', ')}`);
+        target.ws.send(JSON.stringify({
+          type: 'msg',
+          from: msg.from,
+          data: msg.data
+        }));
       }
     }
   });
 
   ws.on('close', () => {
-    if (!roomId || !user) return;
-    const room = activeRooms.get(roomId);
+    if (!roomId || !userId) return;
+    const room = rooms.get(roomId);
     if (!room) return;
-    room.delete(user.id);
-    room.forEach(p => {
-      if (p.ws.readyState === 1) p.ws.send(JSON.stringify({ type: 'peer-left', userId: user.id }));
+    room.delete(userId);
+    room.forEach((p) => {
+      if (p.ws.readyState === 1) {
+        p.ws.send(JSON.stringify({ type: 'leave', userId }));
+      }
     });
-    if (room.size === 0) activeRooms.delete(roomId);
-    console.log(`${user.id} left`);
+    if (room.size === 0) rooms.delete(roomId);
+    console.log(`${userId} left`);
   });
 });
 
-process.on('SIGTERM', () => { wss.clients.forEach(c => c.close()); process.exit(0); });
-server.listen(PORT, '0.0.0.0', () => console.log(`Running on port ${PORT}`));
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server on port ${PORT}`);
+});
