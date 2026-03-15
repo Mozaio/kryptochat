@@ -28,14 +28,12 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .cd .btn:disabled{opacity:.4;cursor:not-allowed}
 .cd .st{margin-top:12px;font-family:var(--fm);font-size:12px;color:var(--am);min-height:20px}
 
-/* Log */
 #log{position:fixed;bottom:0;left:0;right:0;background:rgba(11,14,22,.97);border-top:1px solid var(--bo);padding:10px 14px;max-height:200px;overflow-y:auto;font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.7;z-index:50;display:none}
 #log.show{display:block}
 #log .ok{color:var(--gn)}#log .no{color:var(--rd)}#log .inf{color:var(--cy)}#log .wr{color:var(--am)}
 #toglog{position:fixed;bottom:4px;right:8px;background:transparent;border:1px solid var(--bo);color:var(--t3);font-family:var(--fm);font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;z-index:51}
 #toglog:hover{border-color:var(--t2);color:var(--t2)}
 
-/* Fingerprint */
 .fp{position:fixed;inset:0;background:rgba(4,6,12,.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;visibility:hidden;transition:all .3s}
 .fp.v{opacity:1;visibility:visible}
 .fp-c{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:32px;width:460px;max-width:90vw}
@@ -49,7 +47,6 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .fp-a button{flex:1;padding:11px;border-radius:var(--r);font-family:var(--fm);font-size:12px;cursor:pointer;border:1px solid transparent}
 .fp-a .y{background:var(--gn);color:var(--bg)}.fp-a .n{background:transparent;color:var(--t2);border-color:var(--bo)}
 
-/* App */
 .app{display:grid;grid-template-columns:240px 1fr;height:100vh;opacity:0;transition:opacity .5s}
 .app.v{opacity:1}
 .sb{background:var(--bg1);border-right:1px solid var(--bo);display:flex;flex-direction:column;overflow-y:auto}
@@ -117,7 +114,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 <div class="cd">
   <div class="ico">🔐</div>
   <h1>KRYPTOCHAT</h1>
-  <p class="sub">Double Ratchet · Alles mit TweetNaCl</p>
+  <p class="sub">Double Ratchet · TweetNaCl · E2E verschlüsselt</p>
   <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
   <button class="btn" id="jbtn">VERBINDEN</button>
   <div class="st" id="jst"></div>
@@ -179,7 +176,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 
 <script>
 // =============================================
-// ALLES MIT TWEETNACL — KEIN WEB CRYPTO
+// KRYPTOCHAT — TweetNaCl Double Ratchet
 // =============================================
 
 // ---- DEBUG ----
@@ -214,12 +211,11 @@ const arrEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
 // =============================================
-// KRYPTO — alles mit nacl.hash (SHA-512)
+// KRYPTO — HMAC-SHA512 via nacl.hash
 // =============================================
 
-// HMAC-SHA512 using nacl.hash (RFC 2104)
 function hmac(key, data) {
-  const B = 128; // SHA-512 block size
+  const B = 128;
   let k = key;
   if (k.length > B) k = nacl.hash(k);
   const padded = new Uint8Array(B);
@@ -234,19 +230,17 @@ function hmac(key, data) {
 
   const inner = new Uint8Array(B + data.length);
   inner.set(ipad); inner.set(data, B);
-  const innerHash = nacl.hash(inner); // SHA-512
+  const innerHash = nacl.hash(inner);
 
   const outer = new Uint8Array(B + 64);
   outer.set(opad); outer.set(innerHash, B);
-  return nacl.hash(outer); // SHA-512 → 64 bytes
+  return nacl.hash(outer);
 }
 
-// HKDF-Extract: PRK = HMAC-SHA512(salt, IKM)
 function hkdfExtract(ikm, salt) {
   return hmac(salt || new Uint8Array(64), ikm);
 }
 
-// HKDF-Expand: OKM = HMAC-SHA512(PRK, info || 0x01) — truncate to `len`
 function hkdfExpand(prk, info, len) {
   const buf = new Uint8Array(info.length + 1);
   buf.set(info); buf[info.length] = 1;
@@ -254,12 +248,10 @@ function hkdfExpand(prk, info, len) {
   return len ? okm.slice(0, len) : okm;
 }
 
-// HKDF full
 function hkdf(ikm, salt, info, len) {
   return hkdfExpand(hkdfExtract(ikm, salt), info, len || 64);
 }
 
-// Chain Key Derivation: MK = HMAC(CK, "MSG"), nextCK = HMAC(CK, "CHAIN")
 function chainKdf(ck) {
   return {
     mk: hmac(ck, U8.enc('MK')),
@@ -267,10 +259,8 @@ function chainKdf(ck) {
   };
 }
 
-// Message encryption key (32 bytes from 64-byte MK)
 function encKey(mk) { return mk.slice(0, 32); }
 
-// Fingerprint
 function fp(pub) {
   const h = nacl.hash(pub).slice(0, 12);
   return Array.from(h).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
@@ -280,14 +270,9 @@ function fp(pub) {
 // DOUBLE RATCHET
 // =============================================
 
-// Init both sender + receiver chains from shared secret
-async function initChains(shared, peerRP) {
-  // Root Key = HKDF(shared, salt="INIT", info="ROOT")
+function initChains(shared, peerRP) {
   const rootKey = hkdf(shared, U8.enc('INIT'), U8.enc('ROOT'), 64);
-
-  // PRK for chains = HKDF(peerRP, salt=rootKey, info="DH")
   const prk = hkdf(peerRP, rootKey, U8.enc('DH'), 64);
-
   return {
     rootKey,
     sendCK: hkdfExpand(prk, U8.enc('SEND'), 64),
@@ -295,7 +280,6 @@ async function initChains(shared, peerRP) {
   };
 }
 
-// DH Ratchet step (when receiving new ratchet key)
 function dhRatchet(st, remoteRP) {
   const dh = nacl.scalarMult(st.ephSk, remoteRP);
   const prk = hkdf(dh, st.rootKey, U8.enc('DH'), 64);
@@ -306,15 +290,12 @@ function dhRatchet(st, remoteRP) {
   log('DH-Ratchet ✓', 'ok');
 }
 
-// Encrypt
 function ratchetEncrypt(st, text) {
-  // 1. Message Key from send chain
   const { mk, next } = chainKdf(st.sendCK);
   st.sendCK = next;
   const ek = encKey(mk);
   const idx = st.sendIdx++;
 
-  // 2. New ephemeral keypair + ratchet
   const eph = nacl.box.keyPair();
   const dh = nacl.scalarMult(eph.secretKey, st.remoteRP);
   const prk = hkdf(dh, st.rootKey, U8.enc('DH'), 64);
@@ -323,7 +304,6 @@ function ratchetEncrypt(st, text) {
   st.ephSk = eph.secretKey;
   st.rotations++;
 
-  // 3. Encrypt with nacl.secretbox
   const nonce = nacl.randomBytes(24);
   const ct = nacl.secretbox(U8.enc(text), nonce, ek);
 
@@ -335,16 +315,13 @@ function ratchetEncrypt(st, text) {
   };
 }
 
-// Decrypt
 function ratchetDecrypt(st, data) {
   const rp = B64.dec(data.rp);
   const nonce = B64.dec(data.n);
 
-  // Replay check
   const nk = B64.enc(nonce);
   if (st.usedNonces.has(nk)) { log('Replay!', 'no'); return null; }
 
-  // Skipped key check
   const sk = B64.enc(rp) + ':' + data.i;
   if (st.skipped.has(sk)) {
     const mk = st.skipped.get(sk); st.skipped.delete(sk);
@@ -354,10 +331,8 @@ function ratchetDecrypt(st, data) {
     return U8.dec(pt);
   }
 
-  // DH Ratchet if new ratchet key
   const needsRot = !st.remoteRP || !arrEq(rp, st.remoteRP);
   if (needsRot) {
-    // Cache skipped keys from current receive chain
     if (st.remoteRP && st.recvCK) {
       let ck = st.recvCK;
       for (let i = st.recvIdx; i < data.i; i++) {
@@ -369,7 +344,6 @@ function ratchetDecrypt(st, data) {
     dhRatchet(st, rp);
   }
 
-  // Skip ahead in receive chain
   if (st.recvIdx < data.i) {
     let ck = st.recvCK;
     for (let i = st.recvIdx; i < data.i; i++) {
@@ -380,12 +354,10 @@ function ratchetDecrypt(st, data) {
     st.recvCK = ck;
   }
 
-  // Derive message key and advance chain
   const { mk, next } = chainKdf(st.recvCK);
   st.recvCK = next;
   st.recvIdx = data.i + 1;
 
-  // Decrypt
   const pt = nacl.secretbox.open(B64.dec(data.c), nonce, encKey(mk));
   if (!pt) { log('Decrypt failed!', 'no'); return null; }
 
@@ -394,17 +366,59 @@ function ratchetDecrypt(st, data) {
 }
 
 // =============================================
+// SHARED: KX zu einem Peer initiieren
+// =============================================
+function initiateKX(peerId, peerPubB64, peerRatchetPubB64) {
+  log(`KX → ${peerId}`, 'inf');
+
+  const peerPub = B64.dec(peerPubB64);
+  const peerRP = B64.dec(peerRatchetPubB64);
+  const shared = nacl.box.before(peerPub, myKP.secretKey);
+  log(`Shared secret: ${B64.enc(shared).substring(0,20)}...`);
+
+  const chains = initChains(shared, peerRP);
+  log(`SendCK: ${B64.enc(chains.sendCK).substring(0,20)}...`);
+  log(`RecvCK: ${B64.enc(chains.recvCK).substring(0,20)}...`);
+
+  peers.set(peerId, {
+    pubKey: peerPub,
+    state: {
+      rootKey: chains.rootKey,
+      sendCK: chains.sendCK,
+      recvCK: chains.recvCK,
+      ephSk: myRP.secretKey,
+      remoteRP: peerRP,
+      sendIdx: 0, recvIdx: 0,
+      skipped: new Map(),
+      usedNonces: new Set(),
+      rotations: 0
+    },
+    verified: false
+  });
+
+  // Eigene KX-Daten an den Peer senden
+  socket.send(JSON.stringify({
+    type: 'msg', from: myId, to: peerId,
+    data: {
+      type: 'kx',
+      pubKey: B64.enc(myKP.publicKey),
+      ratchetPub: B64.enc(myRP.publicKey)
+    }
+  }));
+  log(`KX gesendet → ${peerId}`, 'ok');
+}
+
+// =============================================
 // STATE
 // =============================================
-const myKP = nacl.box.keyPair();      // Identity
-const myRP = nacl.box.keyPair();      // Ratchet
+const myKP = nacl.box.keyPair();
+const myRP = nacl.box.keyPair();
 const myId = uid();
 let socket = null, room = null, peers = new Map();
 let stats = { msgs: 0, rots: 0 };
 
 $('mid').textContent = myId;
 log(`ID: ${myId}`, 'ok');
-log('Krypto: HMAC-SHA512 via nacl.hash', 'ok');
 
 // =============================================
 // WEBSOCKET
@@ -464,7 +478,7 @@ function connect(r) {
     socket = null;
     $('est').textContent = 'Getrennt';
     $('est').style.color = 'var(--rd)';
-    addSys('Reconnecting...');
+    addSys('Verbindung verloren...');
     setTimeout(() => { if (room) connect(room); }, 3000);
   };
 
@@ -476,82 +490,52 @@ function connect(r) {
 }
 
 // =============================================
-// NACHRICHTEN
+// ★ NACHRICHTEN — HAUPTHANDLER
 // =============================================
 async function handleMsg(msg) {
+
+  // ── Bestehende Peers beim Join ──
   if (msg.type === 'peers') {
     log(`${msg.peers.length} Peer(s)`, msg.peers.length ? 'ok' : 'wr');
-
     for (const p of msg.peers) {
-      log(`KX → ${p.id}`);
-      const peerPub = B64.dec(p.pubKey);
-      const peerRP = B64.dec(p.ratchetPub);
-      const shared = nacl.box.before(peerPub, myKP.secretKey);
-      log(`Shared secret: ${B64.enc(shared).substring(0,20)}...`);
-
-      const chains = initChains(shared, peerRP);
-      log(`SendCK: ${B64.enc(chains.sendCK).substring(0,20)}...`);
-      log(`RecvCK: ${B64.enc(chains.recvCK).substring(0,20)}...`);
-
-      peers.set(p.id, {
-        pubKey: peerPub,
-        state: {
-          rootKey: chains.rootKey,
-          sendCK: chains.sendCK,
-          recvCK: chains.recvCK,
-          ephSk: myRP.secretKey,
-          remoteRP: peerRP,
-          sendIdx: 0, recvIdx: 0,
-          skipped: new Map(),
-          usedNonces: new Set(),
-          rotations: 0
-        },
-        verified: false
-      });
-
-      socket.send(JSON.stringify({
-        type: 'msg', from: myId, to: p.id,
-        data: {
-          type: 'kx',
-          pubKey: B64.enc(myKP.publicKey),
-          ratchetPub: B64.enc(myRP.publicKey)
-        }
-      }));
-      log(`KX gesendet → ${p.id}`, 'ok');
+      initiateKX(p.id, p.pubKey, p.ratchetPub);
     }
     updPeers();
   }
 
+  // ── ★ FIX: Neuer Peer tritt bei (von Server broadcasted) ──
+  if (msg.type === 'peer-joined') {
+    const p = msg.peer;
+    log(`peer-joined: ${p.id}`, 'ok');
+
+    // KX initiieren zu dem neuen Peer (bidirektional!)
+    initiateKX(p.id, p.pubKey, p.ratchetPub);
+
+    addSys(`${p.id} beigetreten`, true);
+    updPeers();
+  }
+
+  // ── MSG: KX oder verschlüsselte Nachricht ──
   if (msg.type === 'msg' && msg.data) {
     const d = msg.data;
 
     if (d.type === 'kx') {
       log(`KX ← ${msg.from}`, 'ok');
-      const peerPub = B64.dec(d.pubKey);
-      const peerRP = B64.dec(d.ratchetPub);
-      const shared = nacl.box.before(peerPub, myKP.secretKey);
-      log(`Shared secret: ${B64.enc(shared).substring(0,20)}...`);
 
-      const chains = initChains(shared, peerRP);
-      log(`SendCK: ${B64.enc(chains.sendCK).substring(0,20)}...`);
-      log(`RecvCK: ${B64.enc(chains.recvCK).substring(0,20)}...`);
-
-      peers.set(msg.from, {
-        pubKey: peerPub,
-        state: {
-          rootKey: chains.rootKey,
-          sendCK: chains.sendCK,
-          recvCK: chains.recvCK,
-          ephSk: myRP.secretKey,
-          remoteRP: peerRP,
-          sendIdx: 0, recvIdx: 0,
-          skipped: new Map(),
-          usedNonces: new Set(),
-          rotations: 0
-        },
-        verified: false
-      });
-
+      // Eigene KX-Antwort senden falls noch nicht vorhanden
+      if (!peers.has(msg.from)) {
+        log(`Spontaner KX von ${msg.from} — antworte`);
+        initiateKX(msg.from, d.pubKey, d.ratchetPub);
+      } else {
+        // Peer existiert schon (z.B. wir haben KX via peers/peer-joined gesendet)
+        // Ratchet-Key aktualisieren falls nötig
+        const peer = peers.get(msg.from);
+        const newRP = B64.dec(d.ratchetPub);
+        if (!arrEq(newRP, peer.state.remoteRP)) {
+          log(`Neuer Ratchet Key von ${msg.from} — DH-Ratchet`);
+          dhRatchet(peer.state, newRP);
+        }
+      }
       addSys(`${msg.from} beigetreten`, true);
       updPeers();
     }
@@ -559,9 +543,7 @@ async function handleMsg(msg) {
     if (d.type === 'enc') {
       log(`ENC ← ${msg.from} (idx:${d.i})`);
       const peer = peers.get(msg.from);
-      if (!peer) { log('Unbekannt!', 'no'); return; }
-
-      log(`RemoteRP match: ${peer.state.remoteRP ? (arrEq(B64.dec(d.rp), peer.state.remoteRP) ? 'same' : 'NEU') : 'null'}`);
+      if (!peer) { log('Unbekannter Peer!', 'no'); return; }
 
       try {
         const text = ratchetDecrypt(peer.state, d);
@@ -578,6 +560,7 @@ async function handleMsg(msg) {
     }
   }
 
+  // ── Peer verlässt ──
   if (msg.type === 'leave') {
     log(`${msg.userId} left`);
     peers.delete(msg.userId);
@@ -603,16 +586,13 @@ function send() {
     try {
       if (!peer.state.sendCK) { log(`Kein SendCK für ${pid}`, 'no'); continue; }
 
-      log(`Sende → ${pid}, sendCK: ${B64.enc(peer.state.sendCK).substring(0,16)}...`);
       const enc = ratchetEncrypt(peer.state, text);
-      log(`Enc OK, idx:${enc.i}, rp:${enc.rp.substring(0,16)}...`);
-
       socket.send(JSON.stringify({
         type: 'msg', from: myId, to: pid,
         data: { type: 'enc', ...enc }
       }));
       stats.msgs++; stats.rots++;
-      log(`Gesendet → ${pid}`, 'ok');
+      log(`Gesendet → ${pid} (idx:${enc.i})`, 'ok');
     } catch (e) {
       log(`Send err: ${e.message}`, 'no');
       console.error(e);
@@ -638,9 +618,9 @@ function addMsg(sender, text, out) {
   $('mc').scrollTop = $('mc').scrollHeight;
 }
 
-function addSys(text, hl, rot) {
+function addSys(text, hl) {
   const d = document.createElement('div');
-  d.className = `mg sys ${hl ? 'h' : ''} ${rot ? 'r' : ''}`;
+  d.className = `mg sys ${hl ? 'h' : ''}`;
   d.innerHTML = `<span>${text}</span>`;
   $('mc').appendChild(d);
   $('mc').scrollTop = $('mc').scrollHeight;
@@ -650,9 +630,13 @@ function updPeers() {
   if (peers.size === 0) {
     $('pl').innerHTML = '<li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li>';
     $('onc').textContent = '1';
+    $('est').textContent = 'Getrennt';
+    $('est').style.color = 'var(--am)';
     return;
   }
   $('onc').textContent = peers.size + 1;
+  $('est').textContent = peers.size + ' Peer(s)';
+  $('est').style.color = 'var(--gn)';
   $('pl').innerHTML = '';
   peers.forEach((p, id) => {
     const li = document.createElement('li');
