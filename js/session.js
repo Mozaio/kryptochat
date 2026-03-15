@@ -14,6 +14,7 @@ const Session = (() => {
 
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
+    console.log('[MYKEY] FULL:', _hex(pubKey));
   }
 
   function createSession(peerId, theirPubKey) {
@@ -32,9 +33,7 @@ const Session = (() => {
       createdAt: Date.now()
     };
     sessions.set(peerId, session);
-    console.log('[SESS] Created', peerId,
-      'myEphPub:', _hex(ephemeral.publicKey),
-      'theirPub:', _hex(theirPubKey));
+    console.log('[CREATE]', peerId, 'theirPub FULL:', _hex(theirPubKey));
     return session;
   }
 
@@ -58,37 +57,23 @@ const Session = (() => {
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return false;
     if (!_myLongTermPubKey) return false;
 
-    // DH
+    // === VOR dem KDF: VOLLER Key loggen ===
+    console.log('[BEFORE-KDF]', peerId,
+      'myLT FULL:', _hex(_myLongTermPubKey),
+      'theirLT FULL:', _hex(session.theirPubKey));
+
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    // === DEBUG: VOLLER ephemeralShared ===
-    console.log('[DH]', peerId,
-      'ephShared FULL:', _hex(ephemeralShared));
-    console.log('[KEYS]', peerId,
-      'myLT:', _hex(_myLongTermPubKey),
-      'theirLT:', _hex(session.theirPubKey));
-
-    // Combined Buffer
-    const combined = new Uint8Array(
-      ephemeralShared.length + _myLongTermPubKey.length + session.theirPubKey.length
-    );
+    const combined = new Uint8Array(96);
     combined.set(ephemeralShared, 0);
-    combined.set(_myLongTermPubKey, ephemeralShared.length);
-    combined.set(
-      session.theirPubKey,
-      ephemeralShared.length + _myLongTermPubKey.length
-    );
+    combined.set(_myLongTermPubKey, 32);
+    combined.set(session.theirPubKey, 64);
 
-    // === DEBUG: Buffer-Checksum ===
-    let checksum = 0;
-    for (let i = 0; i < combined.length; i++) checksum += combined[i];
-    console.log('[BUF]', peerId,
-      'checksum:', checksum,
-      'first16:', _hex(combined.slice(0, 16)),
-      'last16:', _hex(combined.slice(80, 96)));
+    // === VOLLER Buffer loggen ===
+    console.log('[BUF-FULL]', peerId, _hex(combined));
 
     // SHA-512
     let fullHash;
@@ -102,8 +87,7 @@ const Session = (() => {
     session.sharedSecret = fullHash.slice(0, 32);
     session.established = true;
 
-    console.log('[SECRET]', peerId,
-      'FULL:', _hex(session.sharedSecret));
+    console.log('[SECRET]', peerId, _hex(session.sharedSecret));
 
     combined.fill(0);
     ephemeralShared.fill(0);
