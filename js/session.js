@@ -8,13 +8,8 @@ const Session = (() => {
   const sessions = new Map();
   let _myLongTermPubKey = null;
 
-  function _hex(bytes) {
-    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
-    console.log('[MYKEY] FULL:', _hex(pubKey));
   }
 
   function createSession(peerId, theirPubKey) {
@@ -33,7 +28,6 @@ const Session = (() => {
       createdAt: Date.now()
     };
     sessions.set(peerId, session);
-    console.log('[CREATE]', peerId, 'theirPub FULL:', _hex(theirPubKey));
     return session;
   }
 
@@ -52,43 +46,44 @@ const Session = (() => {
     }
   }
 
+  // Vergleicht zwei Keys byte-für-byte, gibt -1/0/1 zurück
+  function _compareKeys(a, b) {
+    for (let i = 0; i < a.length && i < b.length; i++) {
+      if (a[i] < b[i]) return -1;
+      if (a[i] > b[i]) return 1;
+    }
+    return 0;
+  }
+
   async function computeSharedSecret(peerId) {
     const session = sessions.get(peerId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return false;
     if (!_myLongTermPubKey) return false;
 
-    // === VOR dem KDF: VOLLER Key loggen ===
-    console.log('[BEFORE-KDF]', peerId,
-      'myLT FULL:', _hex(_myLongTermPubKey),
-      'theirLT FULL:', _hex(session.theirPubKey));
-
+    // DH mit ephemeral Keys
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
-    );
+    });
 
+    // BEIDE Seiten müssen dieselbe Reihenfolge verwenden!
+    // → Deterministisch sortieren: kleinerer Key zuerst
+    const [ltFirst, ltSecond] = _compareKeys(_myLongTermPubKey, session.theirPubKey) <= 0
+      ? [_myLongTermPubKey, session.theirPubKey]
+      : [session.theirPubKey, _myLongTermPubKey];
+
+    // SHA-512(ephemeralShared ‖ ltFirst ‖ ltSecond)
     const combined = new Uint8Array(96);
     combined.set(ephemeralShared, 0);
-    combined.set(_myLongTermPubKey, 32);
-    combined.set(session.theirPubKey, 64);
+    combined.set(ltFirst, 32);
+    combined.set(ltSecond, 64);
 
-    // === VOLLER Buffer loggen ===
-    console.log('[BUF-FULL]', peerId, _hex(combined));
-
-    // SHA-512
-    let fullHash;
-    if (typeof sha512 === 'function') {
-      fullHash = await sha512(combined);
-    } else {
-      const h = await crypto.subtle.digest('SHA-512', combined);
-      fullHash = new Uint8Array(h);
-    }
-
-    session.sharedSecret = fullHash.slice(0, 32);
+    // SHA-512 via Web Crypto API
+    const fullHash = await crypto.subtle.digest('SHA-512', combined);
+    session.sharedSecret = new Uint8Array(fullHash).slice(0, 32);
     session.established = true;
 
-    console.log('[SECRET]', peerId, _hex(session.sharedSecret));
-
+    // Aufräumen
     combined.fill(0);
     ephemeralShared.fill(0);
 
