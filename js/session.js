@@ -7,11 +7,11 @@ const Session = (() => {
   const ROTATE_AFTER = 50;
   const sessions = new Map();
 
-  // ── Wird von app.js gesetzt ──
   let _myLongTermPubKey = null;
 
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
+    console.log('[SESSION] Long-Term Key gesetzt, len:', pubKey.length);
   }
 
   function createSession(peerId, theirPubKey) {
@@ -30,6 +30,8 @@ const Session = (() => {
       createdAt: Date.now()
     };
     sessions.set(peerId, session);
+    const myEphPub = Array.from(ephemeral.publicKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('[SESSION] Created:', peerId, 'myEphPub:', myEphPub);
     return session;
   }
 
@@ -48,20 +50,27 @@ const Session = (() => {
     }
   }
 
-  // ── Shared Secret ableiten ──
-  //    scalarMult der ephemeral Keys + Binding an Long-Term Keys
   function computeSharedSecret(peerId) {
     const session = sessions.get(peerId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return false;
     if (!_myLongTermPubKey) return false;
 
-    // NaCl box.before = scalarMult(meinEphemeral.secret, ihrEphemeral.pub)
+    // DH
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    // Binding: H(ephemeralShared ‖ myLongPub ‖ theirLongPub)
+    // Debug: print inputs
+    const myEphSec = Array.from(session.myEphemeral.secretKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const theirEphPub = Array.from(session.theirEphemeralPub.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+    const ephShared = Array.from(ephemeralShared.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('[KDF]', peerId,
+      'myEphSec:', myEphSec,
+      'theirEphPub:', theirEphPub,
+      'ephShared:', ephShared);
+
+    // Binding
     const combined = new Uint8Array(
       ephemeralShared.length + _myLongTermPubKey.length + session.theirPubKey.length
     );
@@ -75,7 +84,10 @@ const Session = (() => {
     session.sharedSecret = nacl.hash(combined).slice(0, 32);
     session.established = true;
 
-    // Temporäre Daten aufräumen
+    // Debug: print final secret
+    const finalSecret = Array.from(session.sharedSecret.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('');
+    console.log('[KDF]', peerId, 'FINAL SECRET:', finalSecret);
+
     combined.fill(0);
     ephemeralShared.fill(0);
 
