@@ -4,7 +4,6 @@
 
 const $ = id => document.getElementById(id);
 
-// ── Base64 ──
 const B64 = {
   enc: u => btoa(String.fromCharCode(...u)),
   dec: s => {
@@ -15,21 +14,24 @@ const B64 = {
   }
 };
 
-// ── Text Encoding ──
 const U8 = {
   enc: t => new TextEncoder().encode(t),
   dec: u => new TextDecoder().decode(u)
 };
 
-// ── Random ID ──
 const uid = () => {
   const b = nacl.randomBytes(6);
   return Array.from(b).map(x => x.toString(36)).join('').substring(0, 8);
 };
 
-// ── HTML Escape ──
 const esc = s => {
   const d = document.createElement('div');
   d.textContent = s;
   return d.innerHTML;
 };
+
+// SHA-512 via Web Crypto API (statt nacl.hash)
+async function sha512(data) {
+  const hashBuffer = await crypto.subtle.digest('SHA-512', data);
+  return new Uint8Array(hashBuffer);
+}
