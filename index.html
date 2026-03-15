@@ -12,7 +12,9 @@
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{--bg:#06080d;--bg1:#0b0e16;--bg2:#111521;--bg-in:#0d1119;--gn:#39ff14;--gn-d:#1a7a0a;--gn-g:rgba(57,255,20,.15);--cy:#00e5ff;--cy-d:#006b7a;--am:#ffb020;--rd:#ff3b3b;--t1:#d8dce8;--t2:#6b7394;--t3:#3a4060;--bo:#1a1f30;--fm:'JetBrains Mono',monospace;--fs:'Outfit',sans-serif;--r:8px}
 html,body{height:100%;overflow:hidden}
-body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;flex-direction:column}
+body{font-family:var(--fs);background:var(--bg);color:var(--t1)}
+
+/* ── Overlay ── */
 .ov{position:fixed;inset:0;background:rgba(4,6,12,.97);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .5s,visibility .5s}
 .ov.h{opacity:0;visibility:hidden;pointer-events:none}
 .cd{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:40px;width:440px;max-width:92vw;text-align:center}
@@ -26,11 +28,15 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .cd .btn:hover{background:#5fff3a}
 .cd .btn:disabled{opacity:.4;cursor:not-allowed}
 .cd .st{margin-top:12px;font-family:var(--fm);font-size:12px;color:var(--am);min-height:20px}
+
+/* ── Log ── */
 #log{position:fixed;bottom:0;left:0;right:0;background:rgba(11,14,22,.97);border-top:1px solid var(--bo);padding:10px 14px;max-height:200px;overflow-y:auto;font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.7;z-index:50;display:none}
 #log.show{display:block}
 #log .ok{color:var(--gn)}#log .no{color:var(--rd)}#log .inf{color:var(--cy)}#log .wr{color:var(--am)}
 #toglog{position:fixed;bottom:4px;right:8px;background:transparent;border:1px solid var(--bo);color:var(--t3);font-family:var(--fm);font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;z-index:51}
 #toglog:hover{border-color:var(--t2);color:var(--t2)}
+
+/* ── Fingerprint ── */
 .fp{position:fixed;inset:0;background:rgba(4,6,12,.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;visibility:hidden;transition:all .3s}
 .fp.v{opacity:1;visibility:visible}
 .fp-c{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:32px;width:460px;max-width:90vw}
@@ -43,8 +49,19 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .fp-a{display:flex;gap:8px}
 .fp-a button{flex:1;padding:11px;border-radius:var(--r);font-family:var(--fm);font-size:12px;cursor:pointer;border:1px solid transparent}
 .fp-a .y{background:var(--gn);color:var(--bg)}.fp-a .n{background:transparent;color:var(--t2);border-color:var(--bo)}
-.app{display:grid;grid-template-columns:240px 1fr;height:100vh;opacity:0;transition:opacity .5s}
+
+/* ── App Layout ── */
+.app{
+  display:grid;
+  grid-template-columns:240px 1fr;
+  grid-template-rows:1fr;
+  height:100vh;
+  opacity:0;
+  transition:opacity .5s;
+}
 .app.v{opacity:1}
+
+/* ── Sidebar ── */
 .sb{background:var(--bg1);border-right:1px solid var(--bo);display:flex;flex-direction:column;overflow-y:auto}
 .sb-h{padding:16px;border-bottom:1px solid var(--bo)}
 .logo{display:flex;align-items:center;gap:8px;font-family:var(--fm);font-weight:600;font-size:13px;color:var(--gn)}
@@ -66,39 +83,136 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .bv:hover{background:var(--gn-g)}.bv.ok{border-color:var(--cy-d);color:var(--cy)}
 .sn{margin-top:auto;padding:10px 16px;border-top:1px solid var(--bo)}
 .sn p{font-family:var(--fm);font-size:8px;color:var(--t3);line-height:1.7}
-.cm{display:flex;flex-direction:column;background:var(--bg)}
-.ch{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--bg1);border-bottom:1px solid var(--bo)}
+
+/* ── Chat Main ── */
+.cm{
+  display:flex;
+  flex-direction:column;
+  background:var(--bg);
+  min-width:0;
+  height:100vh;        /* ★ FIX: volle Höhe */
+  overflow:hidden;      /* ★ FIX: kein Überlaufen */
+}
+
+/* ── Chat Header ── */
+.ch{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 20px;
+  background:var(--bg1);
+  border-bottom:1px solid var(--bo);
+  flex-shrink:0;        /* ★ FIX: nicht schrumpfen */
+}
 .ch-l h2{font-family:var(--fm);font-size:13px;font-weight:500}
 .eb{display:inline-flex;align-items:center;gap:4px;margin-top:2px;font-family:var(--fm);font-size:9px;color:var(--gn);background:var(--gn-g);padding:2px 8px;border-radius:20px;border:1px solid var(--gn-d)}
 .eb .dot{width:5px;height:5px;border-radius:50%;background:var(--gn);animation:rp 3s linear infinite}
 @keyframes rp{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
 .oc{font-family:var(--fm);font-size:11px;color:var(--t2)}.oc span{color:var(--gn);font-weight:600}
-.mc{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:4px}
-.mc::-webkit-scrollbar{width:4px}.mc::-webkit-scrollbar-thumb{background:var(--bo);border-radius:2px}
-.es{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px}
-.es .ei{font-size:32px;opacity:.3}.es p{font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.6}
+
+/* ── Messages Container — HAUPTFIX ── */
+.mc{
+  flex:1 1 0%;          /* ★ FIX: wächst und schrumpft, Basis 0 */
+  min-height:0;         /* ★ FIX: CRITICAL — erlaubt flex-shrink unter content */
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:16px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  scroll-behavior:auto;
+}
+.mc::-webkit-scrollbar{width:5px}
+.mc::-webkit-scrollbar-track{background:transparent}
+.mc::-webkit-scrollbar-thumb{background:var(--bo);border-radius:3px}
+.mc::-webkit-scrollbar-thumb:hover{background:var(--t3)}
+
+/* ── Empty State ── */
+.es{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  gap:6px;
+}
+.es .ei{font-size:32px;opacity:.3}
+.es p{font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.6}
+
+/* ── Message Bubble ── */
 .mg{animation:mi .25s ease}
-@keyframes mi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-.ms{font-family:var(--fm);font-size:9px;color:var(--t3);margin-bottom:1px;margin-left:2px}
-.mb{max-width:70%;padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.5;word-break:break-word}
-.mg.in .mb{background:var(--bg2);border:1px solid var(--bo);border-top-left-radius:2px;align-self:flex-start}
+@keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.ms{font-family:var(--fm);font-size:9px;color:var(--t3);margin-bottom:2px;margin-left:2px}
+.mb{
+  max-width:72%;
+  padding:10px 14px;
+  border-radius:10px;
+  font-size:13px;
+  line-height:1.55;
+  word-break:break-word;
+}
+.mg.in .mb{
+  background:var(--bg2);
+  border:1px solid var(--bo);
+  border-top-left-radius:3px;
+  align-self:flex-start;
+}
 .mg.out{align-self:flex-end;text-align:right}
-.mg.out .mb{background:var(--gn-g);border:1px solid var(--gn-d);border-top-right-radius:2px}
+.mg.out .mb{
+  background:var(--gn-g);
+  border:1px solid var(--gn-d);
+  border-top-right-radius:3px;
+}
 .mg.sys{text-align:center;padding:4px 0}
 .mg.sys span{font-family:var(--fm);font-size:9px;color:var(--t3);background:var(--bg2);padding:2px 12px;border-radius:20px;border:1px solid var(--bo)}
 .mg.sys.h span{color:var(--gn);border-color:var(--gn-d);background:var(--gn-g)}
-.mm{display:flex;align-items:center;gap:4px;margin-top:2px;justify-content:flex-end}
+.mm{display:flex;align-items:center;gap:4px;margin-top:3px;justify-content:flex-end}
 .mg.in .mm{justify-content:flex-start}
 .mt{font-family:var(--fm);font-size:8px;color:var(--t3)}
-.ia{padding:12px 20px;background:var(--bg1);border-top:1px solid var(--bo)}
+
+/* ── Input Area — FIX ── */
+.ia{
+  padding:12px 20px;
+  background:var(--bg1);
+  border-top:1px solid var(--bo);
+  flex-shrink:0;        /* ★ FIX: nicht schrumpfen */
+}
 .iw{display:flex;gap:8px;align-items:flex-end}
-.mn{flex:1;background:var(--bg-in);border:1px solid var(--bo);border-radius:8px;padding:10px 14px;color:var(--t1);font-family:var(--fs);font-size:13px;outline:none;resize:none;min-height:40px;max-height:100px;line-height:1.4;transition:border-color .2s}
+.mn{
+  flex:1;
+  background:var(--bg-in);
+  border:1px solid var(--bo);
+  border-radius:8px;
+  padding:10px 14px;
+  color:var(--t1);
+  font-family:var(--fs);
+  font-size:13px;
+  outline:none;
+  resize:none;
+  min-height:40px;
+  max-height:120px;
+  line-height:1.4;
+  transition:border-color .2s;
+}
 .mn:focus{border-color:var(--gn-d);box-shadow:0 0 0 3px var(--gn-g)}
-.mn::placeholder{color:var(--t3)}.mn:disabled{opacity:.4;cursor:not-allowed}
-.bs{width:40px;height:40px;background:var(--gn);border:none;border-radius:8px;color:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
-.bs:hover:not(:disabled){background:#5fff3a;transform:scale(1.05)}.bs:disabled{opacity:.3;cursor:not-allowed}
-.ih{display:flex;justify-content:space-between;margin-top:4px;padding:0 2px}
+.mn::placeholder{color:var(--t3)}
+.mn:disabled{opacity:.4;cursor:not-allowed}
+.bs{
+  width:40px;height:40px;
+  background:var(--gn);
+  border:none;border-radius:8px;
+  color:var(--bg);font-size:16px;
+  cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  transition:all .2s;
+}
+.bs:hover:not(:disabled){background:#5fff3a;transform:scale(1.05)}
+.bs:disabled{opacity:.3;cursor:not-allowed}
+.ih{display:flex;justify-content:space-between;margin-top:6px;padding:0 2px}
 .ih span{font-family:var(--fm);font-size:8px;color:var(--t3)}
+
 @media(max-width:768px){.app{grid-template-columns:1fr}.sb{display:none}}
 </style>
 </head>
@@ -118,7 +232,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 <div class="fp" id="fpm">
 <div class="fp-c">
   <h3>Schlüssel verifizieren</h3>
-  <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner (z.B. per Telefon).</p>
+  <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner.</p>
   <div class="fp-grid">
     <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
     <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
@@ -146,14 +260,19 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
     <span style="color:var(--gn-d)">●</span> Forward Secrecy
   </p></div>
 </aside>
+
+<!-- ★ FIX: chat main mit korrektem Grid-Layout -->
 <main class="cm">
   <div class="ch">
     <div class="ch-l"><h2 id="ct">Kryptochat</h2><div class="eb"><span class="dot"></span> E2E</div></div>
     <div class="oc"><span id="onc">1</span> online</div>
   </div>
+
+  <!-- ★ FIX: mc ist jetzt scrollbar mit min-height:0 -->
   <div class="mc" id="mc">
     <div class="es" id="es"><div class="ei">🔐</div><p>Warte auf Peer...</p></div>
   </div>
+
   <div class="ia">
     <div class="iw">
       <textarea class="mn" id="min" placeholder="Verbinde zuerst..." rows="1" disabled></textarea>
@@ -168,23 +287,6 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 <button id="toglog">LOG</button>
 
 <script>
-// =============================================
-// KRYPTOCHAT v5 — NaCl Box pro Nachricht
-// =============================================
-// Ansatz: Keine Chains, keine Ratchet.
-// Jede Nachricht wird eigenständig mit nacl.box
-// verschlüsselt (X25519 DH + XSalsa20-Poly1305).
-// Das generiert intern einen ephemeral key,
-// berechnet DH mit dem recipient key, und
-// verschlüsselt mit dem daraus abgeleiteten Key.
-//
-// Sicherheit:
-// - Server sieht nur ciphertext + nonce
-// - Jede Nachricht hat einen frischen ephemeral key
-// - Authenticated Encryption (Poly1305 MAC)
-// - Kein Chain-Desync möglich
-// =============================================
-
 const logEl = document.getElementById('log');
 document.getElementById('toglog').addEventListener('click', () => logEl.classList.toggle('show'));
 function log(msg, cls) {
@@ -207,35 +309,21 @@ const U8 = { enc: t => new TextEncoder().encode(t), dec: u => new TextDecoder().
 const uid = () => { const b = nacl.randomBytes(6); return Array.from(b).map(x => x.toString(36)).join('').substring(0, 8); };
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
-// =============================================
-// KRYPTO — nur nacl.box, nichts weiter
-// =============================================
-
-// Fingerabdruck
 function fingerprint(pubKey) {
   const h = nacl.hash(pubKey).slice(0, 12);
   return Array.from(h).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
 }
 
-// =============================================
-// STATE
-// =============================================
-
 const myKeys = nacl.box.keyPair();
 const myId = uid();
 let socket = null, room = null;
-// peers: Map<id, { pubKey: Uint8Array, verified: boolean, nonces: Set<string> }>
 let peers = new Map();
 let msgCount = 0;
 
 $('mid').textContent = myId;
 log(`ID: ${myId}`, 'ok');
-log(`PubKey: ${B64.enc(myKeys.publicKey).substring(0, 24)}...`, 'inf');
 
-// =============================================
-// WEBSOCKET
-// =============================================
-
+// ── WebSocket ──
 $('rin').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 $('jbtn').addEventListener('click', join);
 
@@ -262,9 +350,7 @@ function connect(r) {
   socket.onopen = () => {
     log('WS ✓', 'ok');
     socket.send(JSON.stringify({
-      type: 'join',
-      room: r,
-      userId: myId,
+      type: 'join', room: r, userId: myId,
       pubKey: B64.enc(myKeys.publicKey)
     }));
     setTimeout(() => {
@@ -291,9 +377,8 @@ function connect(r) {
     socket = null;
     $('est').textContent = 'Getrennt';
     $('est').style.color = 'var(--rd)';
-    addSys('Verbindung verloren — reconnecting...');
-    peers.clear();
-    updPeers();
+    addSys('Verbindung verloren...');
+    peers.clear(); updPeers();
     setTimeout(() => { if (room) connect(room); }, 3000);
   };
 
@@ -304,119 +389,68 @@ function connect(r) {
   };
 }
 
-// =============================================
-// NACHRICHTEN-HANDLER
-// =============================================
-
+// ── Messages ──
 function handleMsg(msg) {
-  // ── Peers-Liste beim Join ──
   if (msg.type === 'peers') {
-    log(`← peers: ${msg.peers.length} Peer(s)`, msg.peers.length ? 'ok' : 'wr');
-
+    log(`← peers: ${msg.peers.length}`, msg.peers.length ? 'ok' : 'wr');
     for (const p of msg.peers) {
-      if (!p.pubKey) { log(`Peer ${p.id} ohne Key`, 'wr'); continue; }
-
-      // Peer registrieren
-      peers.set(p.id, {
-        pubKey: B64.dec(p.pubKey),
-        verified: false,
-        nonces: new Set()
-      });
-
-      // Meinen Key an den Peer senden (KX)
+      if (!p.pubKey) continue;
+      peers.set(p.id, { pubKey: B64.dec(p.pubKey), verified: false, nonces: new Set() });
       socket.send(JSON.stringify({
-        type: 'msg',
-        from: myId,
-        to: p.id,
-        data: {
-          type: 'kx',
-          pubKey: B64.enc(myKeys.publicKey)
-        }
+        type: 'msg', from: myId, to: p.id,
+        data: { type: 'kx', pubKey: B64.enc(myKeys.publicKey) }
       }));
       log(`KX → ${p.id}`, 'ok');
     }
     updPeers();
   }
 
-  // ── Neuer Peer ──
   if (msg.type === 'peer-joined') {
     const p = msg.peer;
     log(`← peer-joined: ${p.id}`, 'ok');
     if (p.pubKey) {
       socket.send(JSON.stringify({
-        type: 'msg',
-        from: myId,
-        to: p.id,
-        data: {
-          type: 'kx',
-          pubKey: B64.enc(myKeys.publicKey)
-        }
+        type: 'msg', from: myId, to: p.id,
+        data: { type: 'kx', pubKey: B64.enc(myKeys.publicKey) }
       }));
       log(`KX → ${p.id}`, 'ok');
     }
     updPeers();
   }
 
-  // ── MSG: KX oder ENC ──
   if (msg.type === 'msg' && msg.data) {
     const d = msg.data;
 
-    // KX: Peer-Key empfangen
     if (d.type === 'kx') {
       log(`← KX von ${msg.from}`, 'ok');
-
       if (d.pubKey) {
-        peers.set(msg.from, {
-          pubKey: B64.dec(d.pubKey),
-          verified: false,
-          nonces: new Set()
-        });
-        log(`PubKey von ${msg.from} gespeichert`, 'ok');
+        peers.set(msg.from, { pubKey: B64.dec(d.pubKey), verified: false, nonces: new Set() });
         addSys(`${msg.from} verbunden`, true);
         updPeers();
       }
     }
 
-    // ENC: Verschlüsselte Nachricht
     if (d.type === 'enc') {
       const peer = peers.get(msg.from);
-      if (!peer) {
-        log(`ENC von unbekanntem ${msg.from}`, 'wr');
-        return;
-      }
-
-      // Replay-Schutz
-      if (peer.nonces.has(d.n)) {
-        log('Replay erkannt!', 'no');
-        return;
-      }
+      if (!peer) { log(`ENC von unbekanntem ${msg.from}`, 'wr'); return; }
+      if (peer.nonces.has(d.n)) { log('Replay!', 'no'); return; }
 
       try {
         const nonce = B64.dec(d.n);
         const ciphertext = B64.dec(d.c);
-
-        // ★ nacl.box.open: authentifiziert + entschlüsselt
-        // Benötigt: ciphertext, nonce, senderPublicKey, recipientSecretKey
         const plaintext = nacl.box.open(ciphertext, nonce, peer.pubKey, myKeys.secretKey);
-
-        if (plaintext === null) {
-          log('Decrypt failed!', 'no');
-          return;
-        }
+        if (plaintext === null) { log('Decrypt failed!', 'no'); return; }
 
         peer.nonces.add(d.n);
-        const text = U8.dec(plaintext);
-        addMsg(msg.from, text, false);
+        addMsg(msg.from, U8.dec(plaintext), false);
         msgCount++;
         updStats();
-        log(`OK: "${text.substring(0, 30)}"`, 'ok');
       } catch (e) {
         log(`Decrypt error: ${e.message}`, 'no');
       }
     }
   }
 
-  // ── Peer verlässt ──
   if (msg.type === 'leave') {
     log(`${msg.userId} left`);
     peers.delete(msg.userId);
@@ -425,15 +459,12 @@ function handleMsg(msg) {
   }
 }
 
-// =============================================
-// SENDEN
-// =============================================
-
+// ── Send ──
 $('sbtn').addEventListener('click', send);
 $('min').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 $('min').addEventListener('input', () => {
   $('min').style.height = 'auto';
-  $('min').style.height = Math.min($('min').scrollHeight, 100) + 'px';
+  $('min').style.height = Math.min($('min').scrollHeight, 120) + 'px';
 });
 
 function send() {
@@ -445,24 +476,14 @@ function send() {
   let sent = 0;
   for (const [pid, peer] of peers) {
     try {
-      // ★ nacl.box: verschlüsselt mit ephemeral key intern
       const nonce = nacl.randomBytes(24);
       const encrypted = nacl.box(U8.enc(text), nonce, peer.pubKey, myKeys.secretKey);
-
-      if (!encrypted) { log(`Encrypt failed für ${pid}`, 'no'); continue; }
-
+      if (!encrypted) continue;
       socket.send(JSON.stringify({
-        type: 'msg',
-        from: myId,
-        to: pid,
-        data: {
-          type: 'enc',
-          n: B64.enc(nonce),
-          c: B64.enc(encrypted)
-        }
+        type: 'msg', from: myId, to: pid,
+        data: { type: 'enc', n: B64.enc(nonce), c: B64.enc(encrypted) }
       }));
       sent++;
-      log(`→ ${pid}`, 'ok');
     } catch (e) {
       log(`Send error ${pid}: ${e.message}`, 'no');
     }
@@ -477,18 +498,29 @@ function send() {
   }
 }
 
-// =============================================
-// UI
-// =============================================
+// ── UI ──
+
+// ★ FIX: scrollToBottom helper
+function scrollToBottom() {
+  const mc = $('mc');
+  requestAnimationFrame(() => {
+    mc.scrollTop = mc.scrollHeight;
+  });
+}
 
 function addMsg(sender, text, out) {
-  const es = $('es'); if (es) es.remove();
+  const es = $('es');
+  if (es) es.remove();
+
   const g = document.createElement('div');
   g.className = `mg ${out ? 'out' : 'in'}`;
   const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
   g.innerHTML = `${!out ? `<div class="ms">${esc(sender)}</div>` : ''}<div class="mb">${esc(text)}</div><div class="mm"><span class="mt">${t}</span></div>`;
+
   $('mc').appendChild(g);
-  $('mc').scrollTop = $('mc').scrollHeight;
+
+  // ★ FIX: Immer nach unten scrollen
+  scrollToBottom();
 }
 
 function addSys(text, hl) {
@@ -496,7 +528,7 @@ function addSys(text, hl) {
   d.className = `mg sys ${hl ? 'h' : ''}`;
   d.innerHTML = `<span>${text}</span>`;
   $('mc').appendChild(d);
-  $('mc').scrollTop = $('mc').scrollHeight;
+  scrollToBottom();
 }
 
 function updPeers() {
@@ -535,9 +567,7 @@ $('fpy').addEventListener('click', () => {
 });
 $('fpn').addEventListener('click', () => fpm.classList.remove('v'));
 
-function updStats() {
-  $('sm').textContent = msgCount;
-}
+function updStats() { $('sm').textContent = msgCount; }
 
 log('Bereit', 'ok');
 </script>
