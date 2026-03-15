@@ -8,568 +8,112 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
-<style>
-*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{--bg:#06080d;--bg1:#0b0e16;--bg2:#111521;--bg-in:#0d1119;--gn:#39ff14;--gn-d:#1a7a0a;--gn-g:rgba(57,255,20,.15);--cy:#00e5ff;--cy-d:#006b7a;--am:#ffb020;--rd:#ff3b3b;--t1:#d8dce8;--t2:#6b7394;--t3:#3a4060;--bo:#1a1f30;--fm:'JetBrains Mono',monospace;--fs:'Outfit',sans-serif;--r:8px}
-html,body{height:100%;overflow:hidden}
-body{font-family:var(--fs);background:var(--bg);color:var(--t1)}
-
-/* ── Overlay ── */
-.ov{position:fixed;inset:0;background:rgba(4,6,12,.97);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .5s,visibility .5s}
-.ov.h{opacity:0;visibility:hidden;pointer-events:none}
-.cd{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:40px;width:440px;max-width:92vw;text-align:center}
-.cd .ico{width:60px;height:60px;margin:0 auto 16px;background:var(--gn-g);border:1px solid var(--gn-d);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px}
-.cd h1{font-family:var(--fm);font-size:20px;font-weight:600;color:var(--gn);margin-bottom:4px}
-.cd .sub{color:var(--t2);font-size:13px;margin-bottom:28px;line-height:1.6}
-.cd input{width:100%;padding:14px;background:var(--bg-in);border:1px solid var(--bo);border-radius:var(--r);color:var(--t1);font-family:var(--fm);font-size:15px;outline:none;text-align:center;transition:border-color .2s}
-.cd input:focus{border-color:var(--gn);box-shadow:0 0 0 3px var(--gn-g)}
-.cd input::placeholder{color:var(--t3)}
-.cd .btn{width:100%;margin-top:14px;padding:14px;background:var(--gn);color:var(--bg);border:none;border-radius:var(--r);font-family:var(--fm);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
-.cd .btn:hover{background:#5fff3a}
-.cd .btn:disabled{opacity:.4;cursor:not-allowed}
-.cd .st{margin-top:12px;font-family:var(--fm);font-size:12px;color:var(--am);min-height:20px}
-
-/* ── Log ── */
-#log{position:fixed;bottom:0;left:0;right:0;background:rgba(11,14,22,.97);border-top:1px solid var(--bo);padding:10px 14px;max-height:200px;overflow-y:auto;font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.7;z-index:50;display:none}
-#log.show{display:block}
-#log .ok{color:var(--gn)}#log .no{color:var(--rd)}#log .inf{color:var(--cy)}#log .wr{color:var(--am)}
-#toglog{position:fixed;bottom:4px;right:8px;background:transparent;border:1px solid var(--bo);color:var(--t3);font-family:var(--fm);font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;z-index:51}
-#toglog:hover{border-color:var(--t2);color:var(--t2)}
-
-/* ── Fingerprint ── */
-.fp{position:fixed;inset:0;background:rgba(4,6,12,.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;visibility:hidden;transition:all .3s}
-.fp.v{opacity:1;visibility:visible}
-.fp-c{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:32px;width:460px;max-width:90vw}
-.fp-c h3{font-family:var(--fm);font-size:15px;margin-bottom:6px}
-.fp-c .fp-sub{color:var(--t2);font-size:13px;margin-bottom:20px;line-height:1.5}
-.fp-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
-.fp-b{background:var(--bg-in);border:1px solid var(--bo);border-radius:var(--r);padding:12px}
-.fp-b label{display:block;font-family:var(--fm);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
-.fp-b code{font-family:var(--fm);font-size:11px;color:var(--gn);word-break:break-all;line-height:1.6}
-.fp-a{display:flex;gap:8px}
-.fp-a button{flex:1;padding:11px;border-radius:var(--r);font-family:var(--fm);font-size:12px;cursor:pointer;border:1px solid transparent}
-.fp-a .y{background:var(--gn);color:var(--bg)}.fp-a .n{background:transparent;color:var(--t2);border-color:var(--bo)}
-
-/* ── App Layout ── */
-.app{
-  display:grid;
-  grid-template-columns:240px 1fr;
-  grid-template-rows:1fr;
-  height:100vh;
-  opacity:0;
-  transition:opacity .5s;
-}
-.app.v{opacity:1}
-
-/* ── Sidebar ── */
-.sb{background:var(--bg1);border-right:1px solid var(--bo);display:flex;flex-direction:column;overflow-y:auto}
-.sb-h{padding:16px;border-bottom:1px solid var(--bo)}
-.logo{display:flex;align-items:center;gap:8px;font-family:var(--fm);font-weight:600;font-size:13px;color:var(--gn)}
-.logo-i{width:28px;height:28px;background:var(--gn-g);border:1px solid var(--gn-d);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px}
-.sb-s{padding:10px 16px;border-bottom:1px solid var(--bo)}
-.sb-s h4{font-family:var(--fm);font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--t3);margin-bottom:6px}
-.id-d{font-family:var(--fm);font-size:10px;color:var(--t2);background:var(--bg2);padding:6px 8px;border-radius:var(--r);border:1px solid var(--bo);word-break:break-all}
-.st-b{background:var(--bg2);border:1px solid var(--bo);border-radius:var(--r);padding:6px 8px;margin-bottom:4px}
-.st-b .sl{font-family:var(--fm);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px}
-.st-b .sv{font-family:var(--fm);font-size:14px;font-weight:600;color:var(--gn)}
-.p-l{list-style:none}
-.p-i{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--bg2);border:1px solid var(--bo);border-radius:var(--r);margin-bottom:4px}
-.p-inf{display:flex;align-items:center;gap:6px}
-.sd{width:7px;height:7px;border-radius:50%;background:var(--gn);animation:pu 2s ease-in-out infinite}
-.sd.w{background:var(--am)}
-@keyframes pu{0%,100%{opacity:1}50%{opacity:.5}}
-.p-nm{font-family:var(--fm);font-size:10px;color:var(--t2)}
-.bv{font-family:var(--fm);font-size:8px;padding:2px 6px;background:transparent;border:1px solid var(--gn-d);color:var(--gn);border-radius:3px;cursor:pointer}
-.bv:hover{background:var(--gn-g)}.bv.ok{border-color:var(--cy-d);color:var(--cy)}
-.sn{margin-top:auto;padding:10px 16px;border-top:1px solid var(--bo)}
-.sn p{font-family:var(--fm);font-size:8px;color:var(--t3);line-height:1.7}
-
-/* ── Chat Main ── */
-.cm{
-  display:flex;
-  flex-direction:column;
-  background:var(--bg);
-  min-width:0;
-  height:100vh;        /* ★ FIX: volle Höhe */
-  overflow:hidden;      /* ★ FIX: kein Überlaufen */
-}
-
-/* ── Chat Header ── */
-.ch{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:12px 20px;
-  background:var(--bg1);
-  border-bottom:1px solid var(--bo);
-  flex-shrink:0;        /* ★ FIX: nicht schrumpfen */
-}
-.ch-l h2{font-family:var(--fm);font-size:13px;font-weight:500}
-.eb{display:inline-flex;align-items:center;gap:4px;margin-top:2px;font-family:var(--fm);font-size:9px;color:var(--gn);background:var(--gn-g);padding:2px 8px;border-radius:20px;border:1px solid var(--gn-d)}
-.eb .dot{width:5px;height:5px;border-radius:50%;background:var(--gn);animation:rp 3s linear infinite}
-@keyframes rp{0%{opacity:1}50%{opacity:.3}100%{opacity:1}}
-.oc{font-family:var(--fm);font-size:11px;color:var(--t2)}.oc span{color:var(--gn);font-weight:600}
-
-/* ── Messages Container — HAUPTFIX ── */
-.mc{
-  flex:1 1 0%;          /* ★ FIX: wächst und schrumpft, Basis 0 */
-  min-height:0;         /* ★ FIX: CRITICAL — erlaubt flex-shrink unter content */
-  overflow-y:auto;
-  overflow-x:hidden;
-  padding:16px;
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  scroll-behavior:auto;
-}
-.mc::-webkit-scrollbar{width:5px}
-.mc::-webkit-scrollbar-track{background:transparent}
-.mc::-webkit-scrollbar-thumb{background:var(--bo);border-radius:3px}
-.mc::-webkit-scrollbar-thumb:hover{background:var(--t3)}
-
-/* ── Empty State ── */
-.es{
-  flex:1;
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  justify-content:center;
-  text-align:center;
-  gap:6px;
-}
-.es .ei{font-size:32px;opacity:.3}
-.es p{font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.6}
-
-/* ── Message Bubble ── */
-.mg{animation:mi .25s ease}
-@keyframes mi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.ms{font-family:var(--fm);font-size:9px;color:var(--t3);margin-bottom:2px;margin-left:2px}
-.mb{
-  max-width:72%;
-  padding:10px 14px;
-  border-radius:10px;
-  font-size:13px;
-  line-height:1.55;
-  word-break:break-word;
-}
-.mg.in .mb{
-  background:var(--bg2);
-  border:1px solid var(--bo);
-  border-top-left-radius:3px;
-  align-self:flex-start;
-}
-.mg.out{align-self:flex-end;text-align:right}
-.mg.out .mb{
-  background:var(--gn-g);
-  border:1px solid var(--gn-d);
-  border-top-right-radius:3px;
-}
-.mg.sys{text-align:center;padding:4px 0}
-.mg.sys span{font-family:var(--fm);font-size:9px;color:var(--t3);background:var(--bg2);padding:2px 12px;border-radius:20px;border:1px solid var(--bo)}
-.mg.sys.h span{color:var(--gn);border-color:var(--gn-d);background:var(--gn-g)}
-.mm{display:flex;align-items:center;gap:4px;margin-top:3px;justify-content:flex-end}
-.mg.in .mm{justify-content:flex-start}
-.mt{font-family:var(--fm);font-size:8px;color:var(--t3)}
-
-/* ── Input Area — FIX ── */
-.ia{
-  padding:12px 20px;
-  background:var(--bg1);
-  border-top:1px solid var(--bo);
-  flex-shrink:0;        /* ★ FIX: nicht schrumpfen */
-}
-.iw{display:flex;gap:8px;align-items:flex-end}
-.mn{
-  flex:1;
-  background:var(--bg-in);
-  border:1px solid var(--bo);
-  border-radius:8px;
-  padding:10px 14px;
-  color:var(--t1);
-  font-family:var(--fs);
-  font-size:13px;
-  outline:none;
-  resize:none;
-  min-height:40px;
-  max-height:120px;
-  line-height:1.4;
-  transition:border-color .2s;
-}
-.mn:focus{border-color:var(--gn-d);box-shadow:0 0 0 3px var(--gn-g)}
-.mn::placeholder{color:var(--t3)}
-.mn:disabled{opacity:.4;cursor:not-allowed}
-.bs{
-  width:40px;height:40px;
-  background:var(--gn);
-  border:none;border-radius:8px;
-  color:var(--bg);font-size:16px;
-  cursor:pointer;
-  display:flex;align-items:center;justify-content:center;
-  flex-shrink:0;
-  transition:all .2s;
-}
-.bs:hover:not(:disabled){background:#5fff3a;transform:scale(1.05)}
-.bs:disabled{opacity:.3;cursor:not-allowed}
-.ih{display:flex;justify-content:space-between;margin-top:6px;padding:0 2px}
-.ih span{font-family:var(--fm);font-size:8px;color:var(--t3)}
-
-@media(max-width:768px){.app{grid-template-columns:1fr}.sb{display:none}}
-</style>
+<link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
+<!-- ── Join Overlay ── -->
 <div class="ov" id="ov">
-<div class="cd">
-  <div class="ico">🔐</div>
-  <h1>KRYPTOCHAT</h1>
-  <p class="sub">NaCl Box · X25519 + XSalsa20-Poly1305<br>Jede Nachricht eigenständig verschlüsselt</p>
-  <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
-  <button class="btn" id="jbtn">VERBINDEN</button>
-  <div class="st" id="jst"></div>
-</div>
+  <div class="cd">
+    <div class="ico">🔐</div>
+    <h1>KRYPTOCHAT</h1>
+    <p class="sub">NaCl Box · X25519 + XSalsa20-Poly1305<br>Jede Nachricht eigenständig verschlüsselt</p>
+    <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
+    <button class="btn" id="jbtn">VERBINDEN</button>
+    <div class="st" id="jst"></div>
+  </div>
 </div>
 
+<!-- ── Fingerprint Modal ── -->
 <div class="fp" id="fpm">
-<div class="fp-c">
-  <h3>Schlüssel verifizieren</h3>
-  <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner.</p>
-  <div class="fp-grid">
-    <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
-    <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
-  </div>
-  <div class="fp-a">
-    <button class="y" id="fpy">VERIFIZIERT</button>
-    <button class="n" id="fpn">ABBRECHEN</button>
-  </div>
-</div>
-</div>
-
-<div class="app" id="app">
-<aside class="sb">
-  <div class="sb-h"><div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div></div>
-  <div class="sb-s"><h4>Deine ID</h4><div class="id-d" id="mid">—</div></div>
-  <div class="sb-s"><h4>Raum</h4><div class="id-d" id="drm" style="text-align:center">—</div></div>
-  <div class="sb-s"><h4>Statistik</h4>
-    <div class="st-b"><div class="sl">Nachrichten</div><div class="sv" id="sm">0</div></div>
-  </div>
-  <div class="sb-s"><h4>Peers</h4><ul class="p-l" id="pl"><li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li></ul></div>
-  <div class="sn"><p>
-    <span style="color:var(--gn-d)">●</span> NaCl box (X25519 + XSalsa20-Poly1305)<br>
-    <span style="color:var(--gn-d)">●</span> Ephemeral Keys pro Nachricht<br>
-    <span style="color:var(--gn-d)">●</span> Authenticated Encryption<br>
-    <span style="color:var(--gn-d)">●</span> Forward Secrecy
-  </p></div>
-</aside>
-
-<!-- ★ FIX: chat main mit korrektem Grid-Layout -->
-<main class="cm">
-  <div class="ch">
-    <div class="ch-l"><h2 id="ct">Kryptochat</h2><div class="eb"><span class="dot"></span> E2E</div></div>
-    <div class="oc"><span id="onc">1</span> online</div>
-  </div>
-
-  <!-- ★ FIX: mc ist jetzt scrollbar mit min-height:0 -->
-  <div class="mc" id="mc">
-    <div class="es" id="es"><div class="ei">🔐</div><p>Warte auf Peer...</p></div>
-  </div>
-
-  <div class="ia">
-    <div class="iw">
-      <textarea class="mn" id="min" placeholder="Verbinde zuerst..." rows="1" disabled></textarea>
-      <button class="bs" id="sbtn" disabled>↑</button>
+  <div class="fp-c">
+    <h3>Schlüssel verifizieren</h3>
+    <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner.</p>
+    <div class="fp-grid">
+      <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
+      <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
     </div>
-    <div class="ih"><span>Shift+Enter = neue Zeile</span><span id="est">Getrennt</span></div>
+    <div class="fp-a">
+      <button class="y" id="fpy">VERIFIZIERT</button>
+      <button class="n" id="fpn">ABBRECHEN</button>
+    </div>
   </div>
-</main>
 </div>
 
+<!-- ── App ── -->
+<div class="app" id="app">
+
+  <!-- Sidebar -->
+  <aside class="sb">
+    <div class="sb-h">
+      <div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div>
+    </div>
+    <div class="sb-s">
+      <h4>Deine ID</h4>
+      <div class="id-d" id="mid">—</div>
+    </div>
+    <div class="sb-s">
+      <h4>Raum</h4>
+      <div class="id-d" id="drm" style="text-align:center">—</div>
+    </div>
+    <div class="sb-s">
+      <h4>Statistik</h4>
+      <div class="st-b">
+        <div class="sl">Nachrichten</div>
+        <div class="sv" id="sm">0</div>
+      </div>
+    </div>
+    <div class="sb-s">
+      <h4>Peers</h4>
+      <ul class="p-l" id="pl">
+        <li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li>
+      </ul>
+    </div>
+    <div class="sn">
+      <p>
+        <span style="color:var(--gn-d)">●</span> NaCl box (X25519 + XSalsa20-Poly1305)<br>
+        <span style="color:var(--gn-d)">●</span> Ephemeral Keys pro Nachricht<br>
+        <span style="color:var(--gn-d)">●</span> Authenticated Encryption<br>
+        <span style="color:var(--gn-d)">●</span> Forward Secrecy
+      </p>
+    </div>
+  </aside>
+
+  <!-- Chat Main -->
+  <main class="cm">
+    <div class="ch">
+      <div class="ch-l">
+        <h2 id="ct">Kryptochat</h2>
+        <div class="eb"><span class="dot"></span> E2E</div>
+      </div>
+      <div class="oc"><span id="onc">1</span> online</div>
+    </div>
+    <div class="mc" id="mc">
+      <div class="es" id="es">
+        <div class="ei">🔐</div>
+        <p>Warte auf Peer...</p>
+      </div>
+    </div>
+    <div class="ia">
+      <div class="iw">
+        <textarea class="mn" id="min" placeholder="Verbinde zuerst..." rows="1" disabled></textarea>
+        <button class="bs" id="sbtn" disabled>↑</button>
+      </div>
+      <div class="ih">
+        <span>Shift+Enter = neue Zeile</span>
+        <span id="est">Getrennt</span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ── Debug Log ── -->
 <div id="log"></div>
 <button id="toglog">LOG</button>
 
-<script>
-const logEl = document.getElementById('log');
-document.getElementById('toglog').addEventListener('click', () => logEl.classList.toggle('show'));
-function log(msg, cls) {
-  const t = new Date().toLocaleTimeString('de-DE');
-  const d = document.createElement('div');
-  d.className = cls || '';
-  d.textContent = `[${t}] ${msg}`;
-  logEl.appendChild(d);
-  logEl.scrollTop = logEl.scrollHeight;
-}
-window.onerror = (msg, src, line) => log(`JS: ${msg} (${line})`, 'no');
-if (typeof nacl === 'undefined') log('TweetNaCl fehlt!', 'no');
-
-const $ = id => document.getElementById(id);
-const B64 = {
-  enc: u => btoa(String.fromCharCode(...u)),
-  dec: s => { const b = atob(s); const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
-};
-const U8 = { enc: t => new TextEncoder().encode(t), dec: u => new TextDecoder().decode(u) };
-const uid = () => { const b = nacl.randomBytes(6); return Array.from(b).map(x => x.toString(36)).join('').substring(0, 8); };
-const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
-
-function fingerprint(pubKey) {
-  const h = nacl.hash(pubKey).slice(0, 12);
-  return Array.from(h).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
-}
-
-const myKeys = nacl.box.keyPair();
-const myId = uid();
-let socket = null, room = null;
-let peers = new Map();
-let msgCount = 0;
-
-$('mid').textContent = myId;
-log(`ID: ${myId}`, 'ok');
-
-// ── WebSocket ──
-$('rin').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
-$('jbtn').addEventListener('click', join);
-
-function join() {
-  const r = $('rin').value.trim();
-  if (!r) { $('rin').focus(); return; }
-  $('jst').textContent = 'Verbinde...';
-  $('jbtn').disabled = true;
-  room = r;
-  connect(r);
-}
-
-function connect(r) {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = `${proto}//${location.host}`;
-  log(`WS → ${url}`, 'inf');
-
-  try { socket = new WebSocket(url); } catch (e) {
-    log(`WS Error: ${e.message}`, 'no');
-    $('jbtn').disabled = false;
-    return;
-  }
-
-  socket.onopen = () => {
-    log('WS ✓', 'ok');
-    socket.send(JSON.stringify({
-      type: 'join', room: r, userId: myId,
-      pubKey: B64.enc(myKeys.publicKey)
-    }));
-    setTimeout(() => {
-      $('ov').classList.add('h');
-      $('app').classList.add('v');
-      $('drm').textContent = r;
-      $('ct').textContent = '#' + r;
-      $('min').disabled = false;
-      $('sbtn').disabled = false;
-      $('min').focus();
-      $('est').textContent = 'Verbunden';
-      $('est').style.color = 'var(--gn)';
-    }, 500);
-  };
-
-  socket.onmessage = e => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-    handleMsg(msg);
-  };
-
-  socket.onclose = ev => {
-    log(`WS closed (${ev.code})`, 'no');
-    socket = null;
-    $('est').textContent = 'Getrennt';
-    $('est').style.color = 'var(--rd)';
-    addSys('Verbindung verloren...');
-    peers.clear(); updPeers();
-    setTimeout(() => { if (room) connect(room); }, 3000);
-  };
-
-  socket.onerror = () => {
-    log('WS error', 'no');
-    $('jst').textContent = 'Fehler!';
-    $('jbtn').disabled = false;
-  };
-}
-
-// ── Messages ──
-function handleMsg(msg) {
-  if (msg.type === 'peers') {
-    log(`← peers: ${msg.peers.length}`, msg.peers.length ? 'ok' : 'wr');
-    for (const p of msg.peers) {
-      if (!p.pubKey) continue;
-      peers.set(p.id, { pubKey: B64.dec(p.pubKey), verified: false, nonces: new Set() });
-      socket.send(JSON.stringify({
-        type: 'msg', from: myId, to: p.id,
-        data: { type: 'kx', pubKey: B64.enc(myKeys.publicKey) }
-      }));
-      log(`KX → ${p.id}`, 'ok');
-    }
-    updPeers();
-  }
-
-  if (msg.type === 'peer-joined') {
-    const p = msg.peer;
-    log(`← peer-joined: ${p.id}`, 'ok');
-    if (p.pubKey) {
-      socket.send(JSON.stringify({
-        type: 'msg', from: myId, to: p.id,
-        data: { type: 'kx', pubKey: B64.enc(myKeys.publicKey) }
-      }));
-      log(`KX → ${p.id}`, 'ok');
-    }
-    updPeers();
-  }
-
-  if (msg.type === 'msg' && msg.data) {
-    const d = msg.data;
-
-    if (d.type === 'kx') {
-      log(`← KX von ${msg.from}`, 'ok');
-      if (d.pubKey) {
-        peers.set(msg.from, { pubKey: B64.dec(d.pubKey), verified: false, nonces: new Set() });
-        addSys(`${msg.from} verbunden`, true);
-        updPeers();
-      }
-    }
-
-    if (d.type === 'enc') {
-      const peer = peers.get(msg.from);
-      if (!peer) { log(`ENC von unbekanntem ${msg.from}`, 'wr'); return; }
-      if (peer.nonces.has(d.n)) { log('Replay!', 'no'); return; }
-
-      try {
-        const nonce = B64.dec(d.n);
-        const ciphertext = B64.dec(d.c);
-        const plaintext = nacl.box.open(ciphertext, nonce, peer.pubKey, myKeys.secretKey);
-        if (plaintext === null) { log('Decrypt failed!', 'no'); return; }
-
-        peer.nonces.add(d.n);
-        addMsg(msg.from, U8.dec(plaintext), false);
-        msgCount++;
-        updStats();
-      } catch (e) {
-        log(`Decrypt error: ${e.message}`, 'no');
-      }
-    }
-  }
-
-  if (msg.type === 'leave') {
-    log(`${msg.userId} left`);
-    peers.delete(msg.userId);
-    updPeers();
-    addSys(`${msg.userId} hat verlassen`);
-  }
-}
-
-// ── Send ──
-$('sbtn').addEventListener('click', send);
-$('min').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
-$('min').addEventListener('input', () => {
-  $('min').style.height = 'auto';
-  $('min').style.height = Math.min($('min').scrollHeight, 120) + 'px';
-});
-
-function send() {
-  const text = $('min').value.trim();
-  if (!text) return;
-  if (!socket || socket.readyState !== 1) { log('WS nicht bereit', 'no'); return; }
-  if (peers.size === 0) { addSys('Kein Peer verbunden'); return; }
-
-  let sent = 0;
-  for (const [pid, peer] of peers) {
-    try {
-      const nonce = nacl.randomBytes(24);
-      const encrypted = nacl.box(U8.enc(text), nonce, peer.pubKey, myKeys.secretKey);
-      if (!encrypted) continue;
-      socket.send(JSON.stringify({
-        type: 'msg', from: myId, to: pid,
-        data: { type: 'enc', n: B64.enc(nonce), c: B64.enc(encrypted) }
-      }));
-      sent++;
-    } catch (e) {
-      log(`Send error ${pid}: ${e.message}`, 'no');
-    }
-  }
-
-  if (sent > 0) {
-    addMsg(myId, text, true);
-    msgCount++;
-    updStats();
-    $('min').value = '';
-    $('min').style.height = 'auto';
-  }
-}
-
-// ── UI ──
-
-// ★ FIX: scrollToBottom helper
-function scrollToBottom() {
-  const mc = $('mc');
-  requestAnimationFrame(() => {
-    mc.scrollTop = mc.scrollHeight;
-  });
-}
-
-function addMsg(sender, text, out) {
-  const es = $('es');
-  if (es) es.remove();
-
-  const g = document.createElement('div');
-  g.className = `mg ${out ? 'out' : 'in'}`;
-  const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-  g.innerHTML = `${!out ? `<div class="ms">${esc(sender)}</div>` : ''}<div class="mb">${esc(text)}</div><div class="mm"><span class="mt">${t}</span></div>`;
-
-  $('mc').appendChild(g);
-
-  // ★ FIX: Immer nach unten scrollen
-  scrollToBottom();
-}
-
-function addSys(text, hl) {
-  const d = document.createElement('div');
-  d.className = `mg sys ${hl ? 'h' : ''}`;
-  d.innerHTML = `<span>${text}</span>`;
-  $('mc').appendChild(d);
-  scrollToBottom();
-}
-
-function updPeers() {
-  if (peers.size === 0) {
-    $('pl').innerHTML = '<li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li>';
-    $('onc').textContent = '1';
-    $('est').textContent = 'Getrennt';
-    $('est').style.color = 'var(--am)';
-    return;
-  }
-  $('onc').textContent = peers.size + 1;
-  $('est').textContent = peers.size + ' Peer(s)';
-  $('est').style.color = 'var(--gn)';
-  $('pl').innerHTML = '';
-  peers.forEach((p, id) => {
-    const li = document.createElement('li');
-    li.className = 'p-i';
-    li.innerHTML = `<div class="p-inf"><div class="sd ${p.verified ? '' : 'w'}"></div><span class="p-nm">${id}</span></div><button class="bv ${p.verified ? 'ok' : ''}" data-p="${id}">${p.verified ? '✓' : '?'}</button>`;
-    $('pl').appendChild(li);
-    li.querySelector('.bv').addEventListener('click', () => showFp(id));
-  });
-}
-
-function showFp(pid) {
-  const p = peers.get(pid);
-  if (!p) return;
-  $('mfp').textContent = fingerprint(myKeys.publicKey);
-  $('pfp').textContent = fingerprint(p.pubKey);
-  fpm.classList.add('v');
-  fpm.dataset.peer = pid;
-}
-$('fpy').addEventListener('click', () => {
-  const pid = fpm.dataset.peer;
-  if (pid && peers.has(pid)) { peers.get(pid).verified = true; updPeers(); }
-  fpm.classList.remove('v');
-});
-$('fpn').addEventListener('click', () => fpm.classList.remove('v'));
-
-function updStats() { $('sm').textContent = msgCount; }
-
-log('Bereit', 'ok');
-</script>
+<script src="js/utils.js"></script>
+<script src="js/crypto.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
