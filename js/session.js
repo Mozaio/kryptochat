@@ -9,13 +9,25 @@ const Session = (() => {
 
   let _myLongTermPubKey = null;
 
+  function _keyHex(key, len) {
+    return Array.from(key.slice(0, len || 8)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
-    console.log('[SESSION] Long-Term Key gesetzt, len:', pubKey.length);
+    const hash = nacl.hash(pubKey).slice(0, 8);
+    console.log('[SESSION] Long-Term Key gesetzt, len:', pubKey.length,
+      'first8:', _keyHex(pubKey, 8),
+      'hash8:', _keyHex(hash, 8));
   }
 
   function createSession(peerId, theirPubKey) {
     const ephemeral = nacl.box.keyPair();
+    const theirHash = nacl.hash(theirPubKey).slice(0, 8);
+    console.log('[SESSION] Create', peerId,
+      'theirPubKey first8:', _keyHex(theirPubKey, 8),
+      'theirPubKey hash8:', _keyHex(theirHash, 8));
+
     const session = {
       peerId,
       theirPubKey,
@@ -30,8 +42,6 @@ const Session = (() => {
       createdAt: Date.now()
     };
     sessions.set(peerId, session);
-    const myEphPub = Array.from(ephemeral.publicKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-    console.log('[SESSION] Created:', peerId, 'myEphPub:', myEphPub);
     return session;
   }
 
@@ -61,14 +71,12 @@ const Session = (() => {
       session.myEphemeral.secretKey
     );
 
-    // Debug: print inputs
-    const myEphSec = Array.from(session.myEphemeral.secretKey.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const theirEphPub = Array.from(session.theirEphemeralPub.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const ephShared = Array.from(ephemeralShared.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-    console.log('[KDF]', peerId,
-      'myEphSec:', myEphSec,
-      'theirEphPub:', theirEphPub,
-      'ephShared:', ephShared);
+    // === DEBUG: Long-Term Keys ===
+    console.log('[KDF-BIND]', peerId,
+      'MY_LT:', _keyHex(_myLongTermPubKey, 8), '(hash:', _keyHex(nacl.hash(_myLongTermPubKey).slice(0, 4), 4), ')',
+      'THEIR_LT:', _keyHex(session.theirPubKey, 8), '(hash:', _keyHex(nacl.hash(session.theirPubKey).slice(0, 4), 4), ')');
+    console.log('[KDF-EPH]', peerId,
+      'ephShared:', _keyHex(ephemeralShared, 8));
 
     // Binding
     const combined = new Uint8Array(
@@ -81,12 +89,18 @@ const Session = (() => {
       ephemeralShared.length + _myLongTermPubKey.length
     );
 
+    // Debug: combined buffer first/last bytes
+    console.log('[KDF-COMBINED]',
+      'first8:', _keyHex(combined, 8),
+      'mid8:', _keyHex(combined.slice(32, 40), 8),
+      'last8:', _keyHex(combined.slice(combined.length - 8), 8),
+      'totalLen:', combined.length);
+
     session.sharedSecret = nacl.hash(combined).slice(0, 32);
     session.established = true;
 
-    // Debug: print final secret
-    const finalSecret = Array.from(session.sharedSecret.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join('');
-    console.log('[KDF]', peerId, 'FINAL SECRET:', finalSecret);
+    console.log('[KDF-SECRET]', peerId,
+      'FINAL:', _keyHex(session.sharedSecret, 16));
 
     combined.fill(0);
     ephemeralShared.fill(0);
