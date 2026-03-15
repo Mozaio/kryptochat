@@ -1,17 +1,11 @@
 /* ═══════════════════════════════════════════
-   app.js — Hauptanwendung
+   app.js — mit Server-Pinning + erzwungener Verifizierung
    ═══════════════════════════════════════════ */
 
 (() => {
 
-  // ── Guard ──
   if (typeof nacl === 'undefined') {
-    document.body.innerHTML = '<p style="color:red;padding:2rem;font-family:monospace">Fehler: TweetNaCl nicht geladen. Seite neu laden.</p>';
-    return;
-  }
-  if (typeof B64 === 'undefined' || typeof Crypto === 'undefined' ||
-      typeof Session === 'undefined' || typeof UI === 'undefined') {
-    document.body.innerHTML = '<p style="color:red;padding:2rem;font-family:monospace">Fehler: Skripte nicht vollständig geladen. Strg+Shift+R drücken.</p>';
+    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: TweetNaCl nicht geladen.</p>';
     return;
   }
 
@@ -23,36 +17,84 @@
   let msgCount = 0;
   let lockedUntilVerified = true;
 
-  Session.setMyLongTermKey(myKeys.publicKey);
+  // ── Server-Fingerprint-Pinning ──
+  // Beim ersten Besuch wird der Fingerprint gespeichert.
+  // Bei jedem weiteren Besuch wird er verglichen.
+  // Stimmt er nicht überein → Warnung, keine Verbindung.
 
+  const KNOWN_SERVER_FP = localStorage.getItem('kc_server_fp');
+
+  async function verifyServer() {
+    try {
+      const resp = await fetch('/api/fingerprint');
+      const data = await resp.json();
+      if (!data.fingerprint) return true; // Kein TLS, kein Pinning möglich
+
+      if (!KNOWN_SERVER_FP) {
+        // Erster Besuch — Fingerprint speichern
+        localStorage.setItem('kc_server_fp', data.fingerprint);
+        UI.log('Server-Fingerprint gespeichert (erster Besuch)', 'ok');
+        return true;
+      }
+
+      if (KNOWN_SERVER_FP !== data.fingerprint) {
+        // Fingerprints passen nicht!
+        UI.log('⚠ SERVER-FINGERPRINT HAT SICH VERÄNDERT!', 'no');
+        const msg = '🚨 SICHERHEITSWARNUNG: Das Server-Zertifikat hat sich verändert!\n\n' +
+          'Möglicherweise läuft ein Man-in-the-Middle-Angriff.\n\n' +
+          'Erwartet: ' + KNOWN_SERVER_FP.slice(0, 16) + '...\n' +
+          'Erhalten: ' + data.fingerprint.slice(0, 16) + '...\n\n' +
+          'Nur fortfahren, wenn du das neue Zertifikat erwartest.';
+        if (!confirm(msg)) return false;
+        localStorage.setItem('kc_server_fp', data.fingerprint);
+      }
+
+      return true;
+    } catch {
+      // Server unterstützt kein Fingerprinting (HTTP)
+      return true;
+    }
+  }
+
+  Session.setMyLongTermKey(myKeys.publicKey);
   $('mid').textContent = myId;
   UI.initLogToggle();
   UI.log(`ID: ${myId}`, 'ok');
 
-  window.onerror = (msg, src, line) => UI.log(`JS: ${msg} (${line})`, 'no');
-
-  // ══════════════════════════════════════════
-  //  Join
-  // ══════════════════════════════════════════
-
+  // ── Join ──
   $('rin').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
   $('jbtn').addEventListener('click', joinRoom);
 
-  function joinRoom() {
+  async function joinRoom() {
     const r = $('rin').value.trim();
     if (!r) { $('rin').focus(); return; }
-    UI.setJoinStatus('Verbinde...');
+
+    UI.setJoinStatus('Verifiziere Server...');
     UI.setJoinDisabled(true);
+
+    // Server verifizieren bevor wir uns verbinden
+    const serverOk = await verifyServer();
+    if (!serverOk) {
+      UI.setJoinStatus('Server-Verifizierung fehlgeschlagen!');
+      UI.setJoinDisabled(false);
+      return;
+    }
+
+    UI.setJoinStatus('Verbinde...');
     room = r;
     connect(r);
   }
 
-  // ══════════════════════════════════════════
-  //  WebSocket
-  // ══════════════════════════════════════════
-
+  // ── WebSocket (nur wss://) ──
   function connect(r) {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+
+    // Warnung bei unsicherem Protokoll
+    if (proto === 'ws:') {
+      UI.log('⚠ UNSICHERE VERBINDUNG (ws://) — Kein TLS!', 'no');
+      UI.addSystem('⚠ Ungesicherte Verbindung! Nachrichten können abgefangen werden.');
+    }
+
     const url = `${proto}//${location.host}`;
 
     try {
@@ -98,11 +140,16 @@
     };
   }
 
-  // ══════════════════════════════════════════
-  //  Message Handling
-  // ══════════════════════════════════════════
-
+  // ── Message Handling ──
   function handleMessage(msg) {
+
+    // Server-Fehler
+    if (msg.type === 'error') {
+      UI.log(`Server-Fehler: ${msg.reason}`, 'no');
+      if (msg.reason === 'rate-limit') UI.addSystem('⚠ Rate-Limit erreicht. Kurz warten.');
+      if (msg.reason === 'room-full') UI.addSystem('⚠ Raum ist voll (max. 10 Peers).');
+      return;
+    }
 
     if (msg.type === 'peers') {
       UI.log(`← peers: ${msg.peers.length}`, msg.peers.length ? 'ok' : 'wr');
@@ -140,10 +187,7 @@
     }
   }
 
-  // ══════════════════════════════════════════
-  //  Key Exchange (async wegen SHA-512)
-  // ══════════════════════════════════════════
-
+  // ── Key Exchange ──
   function sendKeyExchange(peerId) {
     const session = Session.getSession(peerId);
     if (!session) return;
@@ -244,10 +288,7 @@
     }
   }
 
-  // ══════════════════════════════════════════
-  //  Verschlüsselte Nachrichten
-  // ══════════════════════════════════════════
-
+  // ── Verschlüsselte Nachrichten ──
   function handleEncrypted(from, d) {
     const session = Session.getSession(from);
     if (!session || !session.established) {
@@ -283,10 +324,7 @@
     }
   }
 
-  // ══════════════════════════════════════════
-  //  Senden
-  // ══════════════════════════════════════════
-
+  // ── Senden ──
   $('sbtn').addEventListener('click', sendMessage);
   $('min').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -311,14 +349,13 @@
       return;
     }
 
-    if (lockedUntilVerified) {
-      const unverified = [];
-      sessions.forEach((s, id) => { if (!s.verified) unverified.push(id); });
-      if (unverified.length > 0) {
-        UI.addSystem(`🔒 Verifiziere zuerst: ${unverified.join(', ')}`);
-        UI.addSystem(`Klicke auf "⚠" oder "?" in der Seitenleiste.`);
-        return;
-      }
+    // ERZWUNGENE Verifizierung
+    const unverified = [];
+    sessions.forEach((s, id) => { if (!s.verified) unverified.push(id); });
+    if (unverified.length > 0) {
+      UI.addSystem(`🔒 VERIFIZIERUNG ERFORDERLICH: ${unverified.join(', ')}`);
+      UI.addSystem(`Klicke auf "⚠" in der Seitenleiste, um Fingerabdrücke zu vergleichen.`);
+      return;
     }
 
     let sent = 0;
@@ -358,10 +395,7 @@
     }
   }
 
-  // ══════════════════════════════════════════
-  //  Key Rotation
-  // ══════════════════════════════════════════
-
+  // ── Key Rotation ──
   function triggerRotation(peerId) {
     UI.log(`Rotation → ${peerId}`, 'inf');
     Session.rotate(peerId);
@@ -377,10 +411,7 @@
     }
   }
 
-  // ══════════════════════════════════════════
-  //  Fingerprint Verification
-  // ══════════════════════════════════════════
-
+  // ── Fingerprint Verification ──
   $('pl').addEventListener('click', e => {
     const btn = e.target.closest('.bv');
     if (!btn) return;
@@ -397,6 +428,7 @@
       session.verified = true;
       UI.log(`${peerId} verifiziert ✓`, 'ok');
       UI.updatePeers(Session.getAll());
+
       let allVerified = true;
       Session.getAll().forEach(s => { if (!s.verified) allVerified = false; });
       if (allVerified) {
