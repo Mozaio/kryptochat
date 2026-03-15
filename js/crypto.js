@@ -1,17 +1,23 @@
 /* ═══════════════════════════════════════════
-   crypto.js — Erweitert: Signing + Key Derivation
+   crypto.js — NaCl Wrappers + Signing
    ═══════════════════════════════════════════ */
 
 const Crypto = (() => {
 
-  // ── Long-Term Signing Keys (zusätzlich zu Box Keys) ──
-  const signingKeys = nacl.sign.keyPair();
+  // ── Signing Key Pair (wird beim ersten Aufruf erzeugt) ──
+  let _signingKeys = null;
+
+  function _ensureSigningKeys() {
+    if (!_signingKeys) {
+      _signingKeys = nacl.sign.keyPair();
+    }
+    return _signingKeys;
+  }
 
   function generateKeyPair() {
     return nacl.box.keyPair();
   }
 
-  // ── Fingerprint (SHA-512, 12 Bytes, hex-gruppiert) ──
   function fingerprint(pubKey) {
     const h = nacl.hash(pubKey).slice(0, 12);
     return Array.from(h)
@@ -21,18 +27,18 @@ const Crypto = (() => {
       .join(' ');
   }
 
-  // ── Signierter Fingerprint (zeigt, dass der Key dem Besitzer gehört) ──
+  // ── Signierter Fingerprint ──
   function signedFingerprint(pubKey) {
+    const sk = _ensureSigningKeys();
     const fp = nacl.hash(pubKey).slice(0, 12);
-    const signature = nacl.sign.detached(fp, signingKeys.secretKey);
+    const signature = nacl.sign.detached(fp, sk.secretKey);
     return {
       fingerprint: Array.from(fp).map(b => b.toString(16).padStart(2, '0')).join(''),
       signature: B64.enc(signature),
-      signingPubKey: B64.enc(signingKeys.publicKey)
+      signingPubKey: B64.enc(sk.publicKey)
     };
   }
 
-  // ── Verifizieren, ob ein Fingerprint wirklich vom Peer signiert wurde ──
   function verifySignedFingerprint(pubKey, signatureB64, signingPubKeyB64) {
     try {
       const fp = nacl.hash(pubKey).slice(0, 12);
@@ -44,40 +50,34 @@ const Crypto = (() => {
     }
   }
 
-  // ── Verschlüsseln mit Session Key ──
+  // ── Encrypt / Decrypt mit Session Key (shared secret) ──
   function encryptWithSession(plaintext, sharedSecret, nonce) {
     const data = U8.enc(plaintext);
     return nacl.secretbox(data, nonce, sharedSecret);
   }
 
-  // ── Entschlüsseln mit Session Key ──
   function decryptWithSession(ciphertext, nonce, sharedSecret) {
     const plain = nacl.secretbox.open(ciphertext, nonce, sharedSecret);
     if (plain === null) return null;
     return U8.dec(plain);
   }
 
-  // ── Monotoner Nonce erzeugen (8-Byte Counter + 16-Byte Random) ──
-  //    Verhindert Replays AND garantiert Einzigartigkeit
+  // ── Monotoner Nonce ──
   function monotonicNonce(counter) {
-    const nonce = nacl.randomBytes(24);
-    // Erste 8 Bytes = Counter (Big-Endian)
-    const view = new DataView(nonce.buffer);
-    view.setBigUint64(0, counter, false);
-    return nonce;
-  }
-
-  // ── Nonce-Validierung ──
-  function nonceFromCounter(counter) {
     const nonce = new Uint8Array(24);
-    nacl.randomBytes(24).forEach((b, i) => nonce[i] = b);
+    // Random füllen
+    const rand = nacl.randomBytes(24);
+    nonce.set(rand);
+    // Counter in die ersten 8 Bytes schreiben (Big-Endian)
     const view = new DataView(nonce.buffer);
-    view.setBigUint64(0, counter, false);
+    const bigCounter = typeof counter === 'bigint' ? counter : BigInt(counter);
+    view.setBigUint64(0, bigCounter, false);
     return nonce;
   }
 
-  // ── Key Exchange Nachricht signieren ──
+  // ── Key Exchange signieren ──
   function signKeyExchange(payload) {
+    const sk = _ensureSigningKeys();
     const data = U8.enc(JSON.stringify({
       from: payload.from,
       to: payload.to,
@@ -85,13 +85,12 @@ const Crypto = (() => {
       ephemeralPubKey: payload.ephemeralPubKey,
       timestamp: payload.timestamp
     }));
-    const sig = nacl.sign.detached(data, signingKeys.secretKey);
+    const sig = nacl.sign.detached(data, sk.secretKey);
     payload.signature = B64.enc(sig);
-    payload.signingPubKey = B64.enc(signingKeys.publicKey);
+    payload.signingPubKey = B64.enc(sk.publicKey);
     return payload;
   }
 
-  // ── Key Exchange Signatur verifizieren ──
   function verifyKeyExchange(payload) {
     try {
       const data = U8.enc(JSON.stringify({
@@ -110,11 +109,12 @@ const Crypto = (() => {
   }
 
   return {
-    generateKeyPair, fingerprint,
+    generateKeyPair,
+    fingerprint,
     signedFingerprint, verifySignedFingerprint,
     encryptWithSession, decryptWithSession,
     monotonicNonce,
     signKeyExchange, verifyKeyExchange,
-    signingPublicKey: signingKeys.publicKey
+    getSigningPublicKey() { return _ensureSigningKeys().publicKey; }
   };
 })();
