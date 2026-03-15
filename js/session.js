@@ -6,12 +6,7 @@ const Session = (() => {
 
   const ROTATE_AFTER = 50;
   const sessions = new Map();
-
   let _myLongTermPubKey = null;
-
-  function _keyHex(key, len) {
-    return Array.from(key.slice(0, len || 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-  }
 
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
@@ -33,7 +28,6 @@ const Session = (() => {
       createdAt: Date.now()
     };
     sessions.set(peerId, session);
-    console.log('[SESS-CREATE]', peerId, 'theirPubKey first16:', _keyHex(theirPubKey, 16));
     return session;
   }
 
@@ -52,7 +46,8 @@ const Session = (() => {
     }
   }
 
-  function computeSharedSecret(peerId) {
+  // ASYNC: nutzt SHA-512 via Web Crypto statt nacl.hash
+  async function computeSharedSecret(peerId) {
     const session = sessions.get(peerId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return false;
     if (!_myLongTermPubKey) return false;
@@ -63,14 +58,7 @@ const Session = (() => {
       session.myEphemeral.secretKey
     );
 
-    // === FULL KEY DEBUG ===
-    console.log('[KDF-ENTRY]', peerId,
-      'sessionObj_id:', session.peerId,
-      'myLT_first16:', _keyHex(_myLongTermPubKey, 16),
-      'theirLT_first16:', _keyHex(session.theirPubKey, 16),
-      'theirLT_last16:', _keyHex(session.theirPubKey.slice(16), 16));
-
-    // Binding
+    // Binding: SHA-512(ephemeralShared ‖ myLongPub ‖ theirLongPub)
     const combined = new Uint8Array(
       ephemeralShared.length + _myLongTermPubKey.length + session.theirPubKey.length
     );
@@ -81,20 +69,12 @@ const Session = (() => {
       ephemeralShared.length + _myLongTermPubKey.length
     );
 
-    // === Verify buffer ===
-    const theirKeyInBuffer = combined.slice(64, 96);
-    console.log('[KDF-BUFFER]',
-      'combinedLen:', combined.length,
-      'theirKeyInBuf_first16:', _keyHex(theirKeyInBuffer, 16),
-      'theirKeyInBuf_last16:', _keyHex(theirKeyInBuffer.slice(16), 16),
-      'MATCH:', _keyHex(theirKeyInBuffer, 16) === _keyHex(session.theirPubKey, 16));
-
-    session.sharedSecret = nacl.hash(combined).slice(0, 32);
+    // SHA-512 via Web Crypto (deterministisch, nativ)
+    const fullHash = await sha512(combined);
+    session.sharedSecret = fullHash.slice(0, 32);
     session.established = true;
 
-    console.log('[KDF-DONE]', peerId,
-      'secret_first16:', _keyHex(session.sharedSecret, 16));
-
+    // Cleanup
     combined.fill(0);
     ephemeralShared.fill(0);
 
