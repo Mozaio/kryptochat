@@ -8,6 +8,10 @@ const Session = (() => {
   const sessions = new Map();
   let _myLongTermPubKey = null;
 
+  function _hex(bytes) {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
   }
@@ -28,6 +32,9 @@ const Session = (() => {
       createdAt: Date.now()
     };
     sessions.set(peerId, session);
+    console.log('[SESS] Created', peerId,
+      'myEphPub:', _hex(ephemeral.publicKey),
+      'theirPub:', _hex(theirPubKey));
     return session;
   }
 
@@ -46,28 +53,25 @@ const Session = (() => {
     }
   }
 
-  // SHA-512: nutzt sha512() aus utils.js falls vorhanden,
-  // sonst Fallback auf crypto.subtle
-  function _hash(data) {
-    if (typeof sha512 === 'function') {
-      return sha512(data);
-    }
-    return crypto.subtle.digest('SHA-512', data).then(h => new Uint8Array(h));
-  }
-
   async function computeSharedSecret(peerId) {
     const session = sessions.get(peerId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return false;
     if (!_myLongTermPubKey) return false;
 
-    // Diffie-Hellman mit ephemeral Keys
+    // DH
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    // Binding an Long-Term Keys:
-    // SHA-512(ephemeralShared ‖ myLongPub ‖ theirLongPub)
+    // === DEBUG: VOLLER ephemeralShared ===
+    console.log('[DH]', peerId,
+      'ephShared FULL:', _hex(ephemeralShared));
+    console.log('[KEYS]', peerId,
+      'myLT:', _hex(_myLongTermPubKey),
+      'theirLT:', _hex(session.theirPubKey));
+
+    // Combined Buffer
     const combined = new Uint8Array(
       ephemeralShared.length + _myLongTermPubKey.length + session.theirPubKey.length
     );
@@ -78,11 +82,29 @@ const Session = (() => {
       ephemeralShared.length + _myLongTermPubKey.length
     );
 
-    const fullHash = await _hash(combined);
+    // === DEBUG: Buffer-Checksum ===
+    let checksum = 0;
+    for (let i = 0; i < combined.length; i++) checksum += combined[i];
+    console.log('[BUF]', peerId,
+      'checksum:', checksum,
+      'first16:', _hex(combined.slice(0, 16)),
+      'last16:', _hex(combined.slice(80, 96)));
+
+    // SHA-512
+    let fullHash;
+    if (typeof sha512 === 'function') {
+      fullHash = await sha512(combined);
+    } else {
+      const h = await crypto.subtle.digest('SHA-512', combined);
+      fullHash = new Uint8Array(h);
+    }
+
     session.sharedSecret = fullHash.slice(0, 32);
     session.established = true;
 
-    // Aufräumen
+    console.log('[SECRET]', peerId,
+      'FULL:', _hex(session.sharedSecret));
+
     combined.fill(0);
     ephemeralShared.fill(0);
 
