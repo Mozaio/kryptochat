@@ -13,7 +13,9 @@
 :root{--bg:#06080d;--bg1:#0b0e16;--bg2:#111521;--bg-in:#0d1119;--gn:#39ff14;--gn-d:#1a7a0a;--gn-g:rgba(57,255,20,.15);--gn-g2:rgba(57,255,20,.3);--cy:#00e5ff;--cy-d:#006b7a;--am:#ffb020;--rd:#ff3b3b;--t1:#d8dce8;--t2:#6b7394;--t3:#3a4060;--bo:#1a1f30;--fm:'JetBrains Mono',monospace;--fs:'Outfit',sans-serif;--r:8px}
 html,body{height:100%;overflow:hidden}
 body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;flex-direction:column}
-.ov{position:fixed;inset:0;background:rgba(4,6,12,.97);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .5s,visibility .5s}.ov.h{opacity:0;visibility:hidden;pointer-events:none}
+
+.ov{position:fixed;inset:0;background:rgba(4,6,12,.97);display:flex;align-items:center;justify-content:center;z-index:100;transition:opacity .5s,visibility .5s}
+.ov.h{opacity:0;visibility:hidden;pointer-events:none}
 .cd{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:40px;width:440px;max-width:92vw;text-align:center}
 .cd .ico{width:60px;height:60px;margin:0 auto 16px;background:var(--gn-g);border:1px solid var(--gn-d);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px}
 .cd h1{font-family:var(--fm);font-size:20px;font-weight:600;color:var(--gn);margin-bottom:4px}
@@ -22,16 +24,20 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .cd input:focus{border-color:var(--gn);box-shadow:0 0 0 3px var(--gn-g)}
 .cd input::placeholder{color:var(--t3)}
 .cd .btn{width:100%;margin-top:14px;padding:14px;background:var(--gn);color:var(--bg);border:none;border-radius:var(--r);font-family:var(--fm);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s}
-.cd .btn:hover{background:#5fff3a}.cd .btn:disabled{opacity:.4;cursor:not-allowed}
+.cd .btn:hover{background:#5fff3a}
+.cd .btn:disabled{opacity:.4;cursor:not-allowed}
 .cd .st{margin-top:12px;font-family:var(--fm);font-size:12px;color:var(--am);min-height:20px}
 
-#log{position:fixed;bottom:0;left:0;right:0;background:rgba(11,14,22,.95);border-top:1px solid var(--bo);padding:10px 14px;max-height:180px;overflow-y:auto;font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.7;z-index:50;display:none}
+/* Log */
+#log{position:fixed;bottom:0;left:0;right:0;background:rgba(11,14,22,.97);border-top:1px solid var(--bo);padding:10px 14px;max-height:200px;overflow-y:auto;font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.7;z-index:50;display:none}
 #log.show{display:block}
-#log .ok{color:var(--gn)}#log .no{color:var(--rd)}#log .inf{color:var(--cy)}
+#log .ok{color:var(--gn)}#log .no{color:var(--rd)}#log .inf{color:var(--cy)}#log .wr{color:var(--am)}
 #toglog{position:fixed;bottom:4px;right:8px;background:transparent;border:1px solid var(--bo);color:var(--t3);font-family:var(--fm);font-size:9px;padding:2px 8px;border-radius:4px;cursor:pointer;z-index:51}
 #toglog:hover{border-color:var(--t2);color:var(--t2)}
 
-.fp{position:fixed;inset:0;background:rgba(4,6,12,.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;visibility:hidden;transition:all .3s}.fp.v{opacity:1;visibility:visible}
+/* Fingerprint */
+.fp{position:fixed;inset:0;background:rgba(4,6,12,.88);backdrop-filter:blur(20px);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;visibility:hidden;transition:all .3s}
+.fp.v{opacity:1;visibility:visible}
 .fp-c{background:var(--bg2);border:1px solid var(--bo);border-radius:16px;padding:32px;width:460px;max-width:90vw}
 .fp-c h3{font-family:var(--fm);font-size:15px;margin-bottom:6px}
 .fp-c .fp-sub{color:var(--t2);font-size:13px;margin-bottom:20px;line-height:1.5}
@@ -40,11 +46,12 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .fp-b label{display:block;font-family:var(--fm);font-size:9px;color:var(--t3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
 .fp-b code{font-family:var(--fm);font-size:11px;color:var(--gn);word-break:break-all;line-height:1.6}
 .fp-a{display:flex;gap:8px}
-.fp-a button{flex:1;padding:11px;border-radius:var(--r);font-family:var(--fm);font-size:12px;cursor:pointer;transition:all .2s;border:1px solid transparent}
-.fp-a .y{background:var(--gn);color:var(--bg)}.fp-a .y:hover{background:#5fff3a}
-.fp-a .n{background:transparent;color:var(--t2);border-color:var(--bo)}.fp-a .n:hover{border-color:var(--t3);color:var(--t1)}
+.fp-a button{flex:1;padding:11px;border-radius:var(--r);font-family:var(--fm);font-size:12px;cursor:pointer;border:1px solid transparent}
+.fp-a .y{background:var(--gn);color:var(--bg)}.fp-a .n{background:transparent;color:var(--t2);border-color:var(--bo)}
 
-.app{display:grid;grid-template-columns:240px 1fr;height:100vh;opacity:0;transition:opacity .5s}.app.v{opacity:1}
+/* App */
+.app{display:grid;grid-template-columns:240px 1fr;height:100vh;opacity:0;transition:opacity .5s}
+.app.v{opacity:1}
 .sb{background:var(--bg1);border-right:1px solid var(--bo);display:flex;flex-direction:column;overflow-y:auto}
 .sb-h{padding:16px;border-bottom:1px solid var(--bo)}
 .logo{display:flex;align-items:center;gap:8px;font-family:var(--fm);font-weight:600;font-size:13px;color:var(--gn)}
@@ -54,7 +61,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .id-d{font-family:var(--fm);font-size:10px;color:var(--t2);background:var(--bg2);padding:6px 8px;border-radius:var(--r);border:1px solid var(--bo);word-break:break-all}
 .st-b{background:var(--bg2);border:1px solid var(--bo);border-radius:var(--r);padding:6px 8px;margin-bottom:4px}
 .st-b .sl{font-family:var(--fm);font-size:8px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px}
-.st-b .sv{font-family:var(--fm);font-size:14px;font-weight:600}.st-b .sv.g{color:var(--gn)}.st-b .sv.c{color:var(--cy)}
+.st-b .sv{font-family:var(--fm);font-size:14px;font-weight:600;color:var(--gn)}
 .p-l{list-style:none}
 .p-i{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--bg2);border:1px solid var(--bo);border-radius:var(--r);margin-bottom:4px}
 .p-inf{display:flex;align-items:center;gap:6px}
@@ -77,8 +84,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .mc{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:4px}
 .mc::-webkit-scrollbar{width:4px}.mc::-webkit-scrollbar-thumb{background:var(--bo);border-radius:2px}
 .es{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:6px}
-.es .ei{font-size:32px;opacity:.3}
-.es p{font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.6}
+.es .ei{font-size:32px;opacity:.3}.es p{font-family:var(--fm);font-size:10px;color:var(--t3);line-height:1.6}
 .mg{animation:mi .25s ease}
 @keyframes mi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .ms{font-family:var(--fm);font-size:9px;color:var(--t3);margin-bottom:1px;margin-left:2px}
@@ -90,7 +96,8 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .mg.sys span{font-family:var(--fm);font-size:9px;color:var(--t3);background:var(--bg2);padding:2px 12px;border-radius:20px;border:1px solid var(--bo)}
 .mg.sys.h span{color:var(--gn);border-color:var(--gn-d);background:var(--gn-g)}
 .mg.sys.r span{color:var(--cy);border-color:var(--cy-d);background:rgba(0,229,255,.08)}
-.mm{display:flex;align-items:center;gap:4px;margin-top:2px;justify-content:flex-end}.mg.in .mm{justify-content:flex-start}
+.mm{display:flex;align-items:center;gap:4px;margin-top:2px;justify-content:flex-end}
+.mg.in .mm{justify-content:flex-start}
 .mt{font-family:var(--fm);font-size:8px;color:var(--t3)}
 .ia{padding:12px 20px;background:var(--bg1);border-top:1px solid var(--bo)}
 .iw{display:flex;gap:8px;align-items:flex-end}
@@ -101,7 +108,6 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 .bs:hover:not(:disabled){background:#5fff3a;transform:scale(1.05)}.bs:disabled{opacity:.3;cursor:not-allowed}
 .ih{display:flex;justify-content:space-between;margin-top:4px;padding:0 2px}
 .ih span{font-family:var(--fm);font-size:8px;color:var(--t3)}
-
 @media(max-width:768px){.app{grid-template-columns:1fr}.sb{display:none}}
 </style>
 </head>
@@ -111,7 +117,7 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 <div class="cd">
   <div class="ico">🔐</div>
   <h1>KRYPTOCHAT</h1>
-  <p class="sub">Double Ratchet Verschlüsselung</p>
+  <p class="sub">Double Ratchet · Alles mit TweetNaCl</p>
   <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
   <button class="btn" id="jbtn">VERBINDEN</button>
   <div class="st" id="jst"></div>
@@ -139,13 +145,14 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
   <div class="sb-s"><h4>Deine ID</h4><div class="id-d" id="mid">—</div></div>
   <div class="sb-s"><h4>Raum</h4><div class="id-d" id="drm" style="text-align:center">—</div></div>
   <div class="sb-s"><h4>Statistik</h4>
-    <div class="st-b"><div class="sl">Nachrichten</div><div class="sv g" id="sm">0</div></div>
-    <div class="st-b"><div class="sl">Ratchet-Rotationen</div><div class="sv c" id="sr">0</div></div>
+    <div class="st-b"><div class="sl">Nachrichten</div><div class="sv" id="sm">0</div></div>
+    <div class="st-b"><div class="sl">Ratchets</div><div class="sv" id="sr">0</div></div>
   </div>
   <div class="sb-s"><h4>Peers</h4><ul class="p-l" id="pl"><li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li></ul></div>
   <div class="sn"><p>
     <span style="color:var(--gn-d)">●</span> Double Ratchet<br>
     <span style="color:var(--gn-d)">●</span> X25519 + XSalsa20-Poly1305<br>
+    <span style="color:var(--gn-d)">●</span> HMAC-SHA512 (nacl.hash)<br>
     <span style="color:var(--gn-d)">●</span> Perfect Forward Secrecy
   </p></div>
 </aside>
@@ -171,110 +178,152 @@ body{font-family:var(--fs);background:var(--bg);color:var(--t1);display:flex;fle
 <button id="toglog">LOG</button>
 
 <script>
-// ================================================
-// DEBUG
-// ================================================
-const logEl = document.getElementById('log');
-const togBtn = document.getElementById('toglog');
-togBtn.addEventListener('click', () => logEl.classList.toggle('show'));
+// =============================================
+// ALLES MIT TWEETNACL — KEIN WEB CRYPTO
+// =============================================
 
+// ---- DEBUG ----
+const logEl = document.getElementById('log');
+document.getElementById('toglog').addEventListener('click', () => logEl.classList.toggle('show'));
 function log(msg, cls) {
   const t = new Date().toLocaleTimeString('de-DE');
-  const div = document.createElement('div');
-  div.className = cls || '';
-  div.textContent = `[${t}] ${msg}`;
-  logEl.appendChild(div);
+  const d = document.createElement('div');
+  d.className = cls || '';
+  d.textContent = `[${t}] ${msg}`;
+  logEl.appendChild(d);
   logEl.scrollTop = logEl.scrollHeight;
   console.log(`[${t}] ${msg}`);
 }
+window.onerror = (msg, src, line) => { log(`JS: ${msg} (${line})`, 'no'); };
 
-window.onerror = function(msg, src, line) {
-  log(`JS-FEHLER: ${msg} (${line})`, 'no');
-};
-
-// ================================================
-// CHECK TweetNaCl
-// ================================================
+// ---- CHECK ----
 if (typeof nacl === 'undefined') {
   log('TweetNaCl nicht geladen!', 'no');
-  document.getElementById('jst').textContent = 'Bibliothek fehlt! Seite neu laden.';
-} else {
-  log('TweetNaCl geladen', 'ok');
+  document.getElementById('jst').textContent = 'Bibliothek fehlt!';
 }
 
-// ================================================
-// HELPERS
-// ================================================
+// ---- HELPERS ----
 const $ = id => document.getElementById(id);
-const B64 = { enc: u => btoa(String.fromCharCode(...u)), dec: s => new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0))) };
+const B64 = {
+  enc: u => btoa(String.fromCharCode(...u)),
+  dec: s => { const b = atob(s); const a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
+};
 const U8 = { enc: t => new TextEncoder().encode(t), dec: u => new TextDecoder().decode(u) };
-const uid = () => B64.enc(nacl.randomBytes(8)).replace(/[^a-zA-Z0-9]/g, '').slice(0, 10);
+const uid = () => { const b = nacl.randomBytes(6); return Array.from(b).map(x => x.toString(36)).join('').substring(0, 8); };
 const arrEq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 const esc = s => { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
 
-// ================================================
-// KRYPTO HELPERS
-// ================================================
-async function hmac(key, data) {
-  const k = await crypto.subtle.importKey('raw', key, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  return new Uint8Array(await crypto.subtle.sign('HMAC', k, data));
+// =============================================
+// KRYPTO — alles mit nacl.hash (SHA-512)
+// =============================================
+
+// HMAC-SHA512 using nacl.hash (RFC 2104)
+function hmac(key, data) {
+  const B = 128; // SHA-512 block size
+  let k = key;
+  if (k.length > B) k = nacl.hash(k);
+  const padded = new Uint8Array(B);
+  padded.set(k);
+
+  const ipad = new Uint8Array(B);
+  const opad = new Uint8Array(B);
+  for (let i = 0; i < B; i++) {
+    ipad[i] = padded[i] ^ 0x36;
+    opad[i] = padded[i] ^ 0x5c;
+  }
+
+  const inner = new Uint8Array(B + data.length);
+  inner.set(ipad); inner.set(data, B);
+  const innerHash = nacl.hash(inner); // SHA-512
+
+  const outer = new Uint8Array(B + 64);
+  outer.set(opad); outer.set(innerHash, B);
+  return nacl.hash(outer); // SHA-512 → 64 bytes
 }
-async function hkdf(ikm, salt, info, len) {
-  const prk = await hmac(salt || new Uint8Array(32), ikm);
-  const b = new Uint8Array(info.length + 1);
-  b.set(info); b[info.length] = 1;
-  const okm = await hmac(prk, b);
+
+// HKDF-Extract: PRK = HMAC-SHA512(salt, IKM)
+function hkdfExtract(ikm, salt) {
+  return hmac(salt || new Uint8Array(64), ikm);
+}
+
+// HKDF-Expand: OKM = HMAC-SHA512(PRK, info || 0x01) — truncate to `len`
+function hkdfExpand(prk, info, len) {
+  const buf = new Uint8Array(info.length + 1);
+  buf.set(info); buf[info.length] = 1;
+  const okm = hmac(prk, buf);
   return len ? okm.slice(0, len) : okm;
 }
-async function chainKdf(ck) {
+
+// HKDF full
+function hkdf(ikm, salt, info, len) {
+  return hkdfExpand(hkdfExtract(ikm, salt), info, len || 64);
+}
+
+// Chain Key Derivation: MK = HMAC(CK, "MSG"), nextCK = HMAC(CK, "CHAIN")
+function chainKdf(ck) {
   return {
-    next: await hmac(ck, U8.enc('CHAIN')),
-    mk: await hmac(ck, U8.enc('MSG'))
+    mk: hmac(ck, U8.enc('MK')),
+    next: hmac(ck, U8.enc('CK'))
   };
 }
-async function encKey(mk) { return await hkdf(mk, null, U8.enc('ENC'), 32); }
+
+// Message encryption key (32 bytes from 64-byte MK)
+function encKey(mk) { return mk.slice(0, 32); }
+
+// Fingerprint
 function fp(pub) {
-  const h = nacl.hash(pub);
-  return Array.from(h.slice(0, 12)).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
+  const h = nacl.hash(pub).slice(0, 12);
+  return Array.from(h).map(b => b.toString(16).padStart(2, '0')).join('').match(/.{1,4}/g).join(' ');
 }
 
-// ================================================
+// =============================================
 // DOUBLE RATCHET
-// ================================================
-async function initChain(shared, ratchetPub, direction) {
-  const rootKey = await hkdf(shared, U8.enc('INIT'), U8.enc('ROOT'), 32);
-  const prk = await hkdf(ratchetPub, rootKey, U8.enc('DH'), 32);
-  const chainKey = await hkdf(prk, null, U8.enc(direction), 32);
-  return { rootKey, chainKey };
+// =============================================
+
+// Init both sender + receiver chains from shared secret
+async function initChains(shared, peerRP) {
+  // Root Key = HKDF(shared, salt="INIT", info="ROOT")
+  const rootKey = hkdf(shared, U8.enc('INIT'), U8.enc('ROOT'), 64);
+
+  // PRK for chains = HKDF(peerRP, salt=rootKey, info="DH")
+  const prk = hkdf(peerRP, rootKey, U8.enc('DH'), 64);
+
+  return {
+    rootKey,
+    sendCK: hkdfExpand(prk, U8.enc('SEND'), 64),
+    recvCK: hkdfExpand(prk, U8.enc('RECV'), 64)
+  };
 }
 
-async function doDHRatchet(st, remoteRP) {
+// DH Ratchet step (when receiving new ratchet key)
+function dhRatchet(st, remoteRP) {
   const dh = nacl.scalarMult(st.ephSk, remoteRP);
-  const prk = await hkdf(dh, st.rootKey, U8.enc('DH'), 32);
-  st.rootKey = await hkdf(prk, null, U8.enc('ROOT'), 32);
-  st.recvCK = await hkdf(prk, null, U8.enc('RECV'), 32);
+  const prk = hkdf(dh, st.rootKey, U8.enc('DH'), 64);
+  st.rootKey = hkdfExpand(prk, U8.enc('ROOT'), 64);
+  st.recvCK = hkdfExpand(prk, U8.enc('RECV'), 64);
   st.recvIdx = 0;
   st.rotations++;
-  log('DH-Ratchet OK', 'ok');
+  log('DH-Ratchet ✓', 'ok');
 }
 
-async function ratchetEncrypt(st, text) {
-  // 1. Message Key von Send-Chain
-  const { next, mk } = await chainKdf(st.sendCK);
+// Encrypt
+function ratchetEncrypt(st, text) {
+  // 1. Message Key from send chain
+  const { mk, next } = chainKdf(st.sendCK);
   st.sendCK = next;
-  const ek = await encKey(mk);
+  const ek = encKey(mk);
   const idx = st.sendIdx++;
 
-  // 2. Neues ephemeres DH-Paar + Ratchet
+  // 2. New ephemeral keypair + ratchet
   const eph = nacl.box.keyPair();
   const dh = nacl.scalarMult(eph.secretKey, st.remoteRP);
-  const prk = await hkdf(dh, st.rootKey, U8.enc('DH'), 32);
-  st.rootKey = await hkdf(prk, null, U8.enc('ROOT'), 32);
-  st.sendCK = await hkdf(prk, null, U8.enc('SEND'), 32);
+  const prk = hkdf(dh, st.rootKey, U8.enc('DH'), 64);
+  st.rootKey = hkdfExpand(prk, U8.enc('ROOT'), 64);
+  st.sendCK = hkdfExpand(prk, U8.enc('SEND'), 64);
   st.ephSk = eph.secretKey;
   st.rotations++;
 
-  // 3. Verschlüsseln
+  // 3. Encrypt with nacl.secretbox
   const nonce = nacl.randomBytes(24);
   const ct = nacl.secretbox(U8.enc(text), nonce, ek);
 
@@ -286,79 +335,80 @@ async function ratchetEncrypt(st, text) {
   };
 }
 
-async function ratchetDecrypt(st, data) {
+// Decrypt
+function ratchetDecrypt(st, data) {
   const rp = B64.dec(data.rp);
   const nonce = B64.dec(data.n);
 
-  // Nonce-Replay-Check
+  // Replay check
   const nk = B64.enc(nonce);
   if (st.usedNonces.has(nk)) { log('Replay!', 'no'); return null; }
 
-  // Übersprungene Keys
-  const sk = `${B64.enc(rp)}:${data.i}`;
+  // Skipped key check
+  const sk = B64.enc(rp) + ':' + data.i;
   if (st.skipped.has(sk)) {
     const mk = st.skipped.get(sk); st.skipped.delete(sk);
-    const ek = await encKey(mk);
-    const pt = nacl.secretbox.open(B64.dec(data.c), nonce, ek);
+    const pt = nacl.secretbox.open(B64.dec(data.c), nonce, encKey(mk));
     if (!pt) return null;
     st.usedNonces.add(nk);
     return U8.dec(pt);
   }
 
-  // DH-Ratchet bei neuem Ratchet Key
+  // DH Ratchet if new ratchet key
   const needsRot = !st.remoteRP || !arrEq(rp, st.remoteRP);
   if (needsRot) {
+    // Cache skipped keys from current receive chain
     if (st.remoteRP && st.recvCK) {
       let ck = st.recvCK;
       for (let i = st.recvIdx; i < data.i; i++) {
-        const r = await chainKdf(ck);
-        st.skipped.set(`${B64.enc(st.remoteRP)}:${i}`, r.mk);
+        const r = chainKdf(ck);
+        st.skipped.set(B64.enc(st.remoteRP) + ':' + i, r.mk);
         ck = r.next;
       }
     }
-    await doDHRatchet(st, rp);
+    dhRatchet(st, rp);
   }
 
-  // Übersprungene Keys für aktuellen Ratchet
+  // Skip ahead in receive chain
   if (st.recvIdx < data.i) {
     let ck = st.recvCK;
     for (let i = st.recvIdx; i < data.i; i++) {
-      const r = await chainKdf(ck);
-      st.skipped.set(`${B64.enc(rp)}:${i}`, r.mk);
+      const r = chainKdf(ck);
+      st.skipped.set(B64.enc(rp) + ':' + i, r.mk);
       ck = r.next;
     }
     st.recvCK = ck;
   }
 
-  // Message Key ableiten
-  const { next, mk } = await chainKdf(st.recvCK);
+  // Derive message key and advance chain
+  const { mk, next } = chainKdf(st.recvCK);
   st.recvCK = next;
   st.recvIdx = data.i + 1;
 
-  const ek = await encKey(mk);
-  const pt = nacl.secretbox.open(B64.dec(data.c), nonce, ek);
+  // Decrypt
+  const pt = nacl.secretbox.open(B64.dec(data.c), nonce, encKey(mk));
   if (!pt) { log('Decrypt failed!', 'no'); return null; }
 
   st.usedNonces.add(nk);
   return U8.dec(pt);
 }
 
-// ================================================
+// =============================================
 // STATE
-// ================================================
-const myKP = nacl.box.keyPair();      // Identity Key Pair
-const myRP = nacl.box.keyPair();      // Ratchet Key Pair
+// =============================================
+const myKP = nacl.box.keyPair();      // Identity
+const myRP = nacl.box.keyPair();      // Ratchet
 const myId = uid();
-let socket = null, room = null;
-let peers = new Map();
+let socket = null, room = null, peers = new Map();
 let stats = { msgs: 0, rots: 0 };
 
 $('mid').textContent = myId;
 log(`ID: ${myId}`, 'ok');
+log('Krypto: HMAC-SHA512 via nacl.hash', 'ok');
 
-// ================================================
+// =============================================
 // WEBSOCKET
-// ================================================
+// =============================================
 $('rin').addEventListener('keydown', e => { if (e.key === 'Enter') join(); });
 $('jbtn').addEventListener('click', join);
 
@@ -376,9 +426,7 @@ function connect(r) {
   const url = `${proto}//${location.host}`;
   log(`WS → ${url}`, 'inf');
 
-  try {
-    socket = new WebSocket(url);
-  } catch (e) {
+  try { socket = new WebSocket(url); } catch (e) {
     log(`WS Error: ${e.message}`, 'no');
     $('jbtn').disabled = false;
     return;
@@ -391,8 +439,6 @@ function connect(r) {
       pubKey: B64.enc(myKP.publicKey),
       ratchetPub: B64.enc(myRP.publicKey)
     }));
-    log(`Join gesendet: "${r}"`, 'ok');
-
     setTimeout(() => {
       $('ov').classList.add('h');
       $('app').classList.add('v');
@@ -410,7 +456,7 @@ function connect(r) {
     let msg;
     try { msg = JSON.parse(e.data); } catch { return; }
     log(`← ${msg.type}`, 'inf');
-    handle(msg);
+    handleMsg(msg);
   };
 
   socket.onclose = ev => {
@@ -418,7 +464,7 @@ function connect(r) {
     socket = null;
     $('est').textContent = 'Getrennt';
     $('est').style.color = 'var(--rd)';
-    addSys('Verbindung verloren — reconnecting...');
+    addSys('Reconnecting...');
     setTimeout(() => { if (room) connect(room); }, 3000);
   };
 
@@ -429,29 +475,30 @@ function connect(r) {
   };
 }
 
-// ================================================
-// NACHRICHTEN VERARBEITEN
-// ================================================
-async function handle(msg) {
+// =============================================
+// NACHRICHTEN
+// =============================================
+async function handleMsg(msg) {
   if (msg.type === 'peers') {
-    log(`${msg.peers.length} Peer(s) gefunden`, 'ok');
+    log(`${msg.peers.length} Peer(s)`, msg.peers.length ? 'ok' : 'wr');
 
     for (const p of msg.peers) {
-      log(`Key Exchange → ${p.id}`);
+      log(`KX → ${p.id}`);
       const peerPub = B64.dec(p.pubKey);
       const peerRP = B64.dec(p.ratchetPub);
       const shared = nacl.box.before(peerPub, myKP.secretKey);
+      log(`Shared secret: ${B64.enc(shared).substring(0,20)}...`);
 
-      // BEIDE Chains initialisieren (Sender + Empfänger)
-      const sChain = await initChain(shared, peerRP, 'SEND');
-      const rChain = await initChain(shared, peerRP, 'RECV');
+      const chains = initChains(shared, peerRP);
+      log(`SendCK: ${B64.enc(chains.sendCK).substring(0,20)}...`);
+      log(`RecvCK: ${B64.enc(chains.recvCK).substring(0,20)}...`);
 
       peers.set(p.id, {
         pubKey: peerPub,
         state: {
-          rootKey: sChain.rootKey,
-          sendCK: sChain.chainKey,
-          recvCK: rChain.chainKey,
+          rootKey: chains.rootKey,
+          sendCK: chains.sendCK,
+          recvCK: chains.recvCK,
           ephSk: myRP.secretKey,
           remoteRP: peerRP,
           sendIdx: 0, recvIdx: 0,
@@ -462,7 +509,6 @@ async function handle(msg) {
         verified: false
       });
 
-      // Key Exchange senden (inkl. Ratchet Public Key!)
       socket.send(JSON.stringify({
         type: 'msg', from: myId, to: p.id,
         data: {
@@ -471,7 +517,7 @@ async function handle(msg) {
           ratchetPub: B64.enc(myRP.publicKey)
         }
       }));
-      log(`Key Exchange gesendet → ${p.id}`, 'ok');
+      log(`KX gesendet → ${p.id}`, 'ok');
     }
     updPeers();
   }
@@ -480,20 +526,22 @@ async function handle(msg) {
     const d = msg.data;
 
     if (d.type === 'kx') {
-      log(`Key Exchange ← ${msg.from}`, 'ok');
+      log(`KX ← ${msg.from}`, 'ok');
       const peerPub = B64.dec(d.pubKey);
       const peerRP = B64.dec(d.ratchetPub);
       const shared = nacl.box.before(peerPub, myKP.secretKey);
+      log(`Shared secret: ${B64.enc(shared).substring(0,20)}...`);
 
-      const sChain = await initChain(shared, peerRP, 'SEND');
-      const rChain = await initChain(shared, peerRP, 'RECV');
+      const chains = initChains(shared, peerRP);
+      log(`SendCK: ${B64.enc(chains.sendCK).substring(0,20)}...`);
+      log(`RecvCK: ${B64.enc(chains.recvCK).substring(0,20)}...`);
 
       peers.set(msg.from, {
         pubKey: peerPub,
         state: {
-          rootKey: sChain.rootKey,
-          sendCK: sChain.chainKey,
-          recvCK: rChain.chainKey,
+          rootKey: chains.rootKey,
+          sendCK: chains.sendCK,
+          recvCK: chains.recvCK,
           ephSk: myRP.secretKey,
           remoteRP: peerRP,
           sendIdx: 0, recvIdx: 0,
@@ -504,28 +552,28 @@ async function handle(msg) {
         verified: false
       });
 
-      log(`Ratchet OK für ${msg.from}`, 'ok');
       addSys(`${msg.from} beigetreten`, true);
       updPeers();
     }
 
     if (d.type === 'enc') {
-      log(`Encrypted ← ${msg.from}`);
+      log(`ENC ← ${msg.from} (idx:${d.i})`);
       const peer = peers.get(msg.from);
-      if (!peer) { log(`Unbekannter Peer: ${msg.from}`, 'no'); return; }
+      if (!peer) { log('Unbekannt!', 'no'); return; }
+
+      log(`RemoteRP match: ${peer.state.remoteRP ? (arrEq(B64.dec(d.rp), peer.state.remoteRP) ? 'same' : 'NEU') : 'null'}`);
 
       try {
-        const text = await ratchetDecrypt(peer.state, d);
+        const text = ratchetDecrypt(peer.state, d);
         if (text !== null) {
           addMsg(msg.from, text, false);
           stats.msgs++;
           updStats();
-          log(`Entschlüsselt: "${text.substring(0, 30)}..."`, 'ok');
-        } else {
-          log('Decrypt null', 'no');
+          log(`OK: "${text.substring(0, 25)}..."`, 'ok');
         }
       } catch (e) {
-        log(`Decrypt error: ${e.message}`, 'no');
+        log(`Decrypt err: ${e.message}`, 'no');
+        console.error(e);
       }
     }
   }
@@ -538,37 +586,27 @@ async function handle(msg) {
   }
 }
 
-// ================================================
+// =============================================
 // SENDEN
-// ================================================
+// =============================================
 $('sbtn').addEventListener('click', send);
 $('min').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 $('min').addEventListener('input', () => { $('min').style.height = 'auto'; $('min').style.height = Math.min($('min').scrollHeight, 100) + 'px'; });
 
-async function send() {
+function send() {
   const text = $('min').value.trim();
   if (!text) return;
-
-  if (!socket || socket.readyState !== 1) {
-    log('WS nicht bereit!', 'no');
-    return;
-  }
-  if (peers.size === 0) {
-    log('Keine Peers!', 'no');
-    addSys('Warte auf Peer...');
-    return;
-  }
-
-  log(`Sende an ${peers.size} Peer(s)...`);
+  if (!socket || socket.readyState !== 1) { log('WS nicht bereit', 'no'); return; }
+  if (peers.size === 0) { log('Keine Peers', 'no'); addSys('Warte auf Peer...'); return; }
 
   for (const [pid, peer] of peers) {
     try {
-      if (!peer.state.sendCK) {
-        log(`Kein Send-Chain für ${pid}!`, 'no');
-        continue;
-      }
+      if (!peer.state.sendCK) { log(`Kein SendCK für ${pid}`, 'no'); continue; }
 
-      const enc = await ratchetEncrypt(peer.state, text);
+      log(`Sende → ${pid}, sendCK: ${B64.enc(peer.state.sendCK).substring(0,16)}...`);
+      const enc = ratchetEncrypt(peer.state, text);
+      log(`Enc OK, idx:${enc.i}, rp:${enc.rp.substring(0,16)}...`);
+
       socket.send(JSON.stringify({
         type: 'msg', from: myId, to: pid,
         data: { type: 'enc', ...enc }
@@ -576,23 +614,22 @@ async function send() {
       stats.msgs++; stats.rots++;
       log(`Gesendet → ${pid}`, 'ok');
     } catch (e) {
-      log(`Send error (${pid}): ${e.message}`, 'no');
+      log(`Send err: ${e.message}`, 'no');
+      console.error(e);
     }
   }
 
   addMsg(myId, text, true);
   $('min').value = '';
   $('min').style.height = 'auto';
-  $('min').focus();
   updStats();
 }
 
-// ================================================
+// =============================================
 // UI
-// ================================================
+// =============================================
 function addMsg(sender, text, out) {
-  const es = $('es');
-  if (es) es.remove();
+  const es = $('es'); if (es) es.remove();
   const g = document.createElement('div');
   g.className = `mg ${out ? 'out' : 'in'}`;
   const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
