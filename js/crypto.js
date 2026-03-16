@@ -1,17 +1,9 @@
 /* ═══════════════════════════════════════════
-   crypto.js — NaCl Wrappers + Signing
+   crypto.js — NaCl Wrappers
+   Alles passiert hier. Der Server sieht nichts.
    ═══════════════════════════════════════════ */
 
 const Crypto = (() => {
-
-  let _signingKeys = null;
-
-  function _ensureSigningKeys() {
-    if (!_signingKeys) {
-      _signingKeys = nacl.sign.keyPair();
-    }
-    return _signingKeys;
-  }
 
   function generateKeyPair() {
     return nacl.box.keyPair();
@@ -26,45 +18,13 @@ const Crypto = (() => {
       .join(' ');
   }
 
-  function signedFingerprint(pubKey) {
-    const sk = _ensureSigningKeys();
-    const fp = nacl.hash(pubKey).slice(0, 12);
-    const signature = nacl.sign.detached(fp, sk.secretKey);
-    return {
-      fingerprint: Array.from(fp).map(b => b.toString(16).padStart(2, '0')).join(''),
-      signature: B64.enc(signature),
-      signingPubKey: B64.enc(sk.publicKey)
-    };
-  }
-
-  function verifySignedFingerprint(pubKey, signatureB64, signingPubKeyB64) {
-    try {
-      const fp = nacl.hash(pubKey).slice(0, 12);
-      const signature = B64.dec(signatureB64);
-      const signingPubKey = B64.dec(signingPubKeyB64);
-      return nacl.sign.detached.verify(fp, signature, signingPubKey);
-    } catch {
-      return false;
-    }
-  }
-
   function encryptWithSession(plaintext, sharedSecret, nonce) {
     const data = U8.enc(plaintext);
-    const result = nacl.secretbox(data, nonce, sharedSecret);
-    if (result) {
-      const hexSecret = Array.from(sharedSecret.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-      const hexNonce = Array.from(nonce.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-      console.log('[ENC] secret:', hexSecret, 'nonce:', hexNonce, 'ptLen:', data.length, 'ctLen:', result.length);
-    }
-    return result;
+    return nacl.secretbox(data, nonce, sharedSecret);
   }
 
   function decryptWithSession(ciphertext, nonce, sharedSecret) {
-    const hexSecret = Array.from(sharedSecret.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-    const hexNonce = Array.from(nonce.slice(0, 8)).map(b => b.toString(16).padStart(2, '0')).join('');
-    console.log('[DEC] secret:', hexSecret, 'nonce:', hexNonce, 'ctLen:', ciphertext.length);
     const plain = nacl.secretbox.open(ciphertext, nonce, sharedSecret);
-    console.log('[DEC] result:', plain === null ? 'FAILED' : 'OK, len=' + plain.length);
     if (plain === null) return null;
     return U8.dec(plain);
   }
@@ -79,8 +39,9 @@ const Crypto = (() => {
     return nonce;
   }
 
-  function signKeyExchange(payload) {
-    const sk = _ensureSigningKeys();
+  // Signierter Key Exchange — damit der Server den Inhalt nicht fälschen kann
+  // Der Server sieht die Signatur, kann sie aber ohne den geheimen Schlüssel nicht fälschen
+  function signKeyExchange(payload, signingKeys) {
     const data = U8.enc(JSON.stringify({
       from: payload.from,
       to: payload.to,
@@ -88,9 +49,9 @@ const Crypto = (() => {
       ephemeralPubKey: payload.ephemeralPubKey,
       timestamp: payload.timestamp
     }));
-    const sig = nacl.sign.detached(data, sk.secretKey);
+    const sig = nacl.sign.detached(data, signingKeys.secretKey);
     payload.signature = B64.enc(sig);
-    payload.signingPubKey = B64.enc(sk.publicKey);
+    payload.signingPubKey = B64.enc(signingKeys.publicKey);
     return payload;
   }
 
@@ -114,10 +75,10 @@ const Crypto = (() => {
   return {
     generateKeyPair,
     fingerprint,
-    signedFingerprint, verifySignedFingerprint,
-    encryptWithSession, decryptWithSession,
+    encryptWithSession,
+    decryptWithSession,
     monotonicNonce,
-    signKeyExchange, verifyKeyExchange,
-    getSigningPublicKey() { return _ensureSigningKeys().publicKey; }
+    signKeyExchange,
+    verifyKeyExchange
   };
 })();
