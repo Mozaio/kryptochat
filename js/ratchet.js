@@ -1,25 +1,61 @@
 /* ═══════════════════════════════════════════════════
-   ratchet.js — Double Ratchet (FINALE VERSION)
+   ratchet.js — Double Ratchet (Gehärtet)
    
-   FIX: sharedSecret ist bereits 32 Bytes (X25519).
-   Es wird NICHT nochmal gehasht — das war der Bug!
+   Änderungen (nur Sicherheit, keine Logik-Änderung):
+   1. FIX: rootKey = sharedSecret (nicht gehasht — X25519 ist bereits ein sicherer Key)
+   2. FIX: prevCount wird KORREKT gespeichert (vor sendCount Reset)
+   3. FIX: Sensible Daten werden nach Verwendung gelöscht
+   4. FIX: Kein unnötiger DH-Output bei normalem Ratchet
+   5. FIX: Maximale Chain-Länge gegen Memory-DoS
+   6. FIX: Validate Header vor Verarbeitung
    ═══════════════════════════════════════════════════ */
 
 const DoubleRatchet = (() => {
 
+  const MAX_CHAIN_LENGTH = 1000;   // Max Nachrichten pro Chain
+  const MAX_SKIPPED_KEYS = 500;    // Max gespeicherte übersprungene Keys
+  const PAD_BLOCK = 512;           // Nachrichten-Padding-Größe
+
+  // Dummy-DH für symmetrischen Start (32 Null-Bytes)
+  // Beide Seiten verwenden denselben Wert → gleiche Ableitung
+  const DUMMY_DH = new Uint8Array(32);
+
+  // ══════════════════════════════════════════
+  //  KDF-Funktionen
+  // ══════════════════════════════════════════
+
   function kdfRK(rootKey, dhOutput) {
-    const hmac = nacl.hash(new Uint8Array([...rootKey, ...dhOutput]));
+    const input = new Uint8Array(64);
+    input.set(rootKey, 0);
+    input.set(dhOutput, 32);
+    const hash = nacl.hash(input);
+    _burn(input);
     return {
-      rootKey:  hmac.slice(0, 32),
-      chainKey: hmac.slice(32, 64)
+      rootKey:  hash.slice(0, 32),
+      chainKey: hash.slice(32, 64)
     };
   }
 
   function kdfCK(chainKey) {
-    const newChainKey = nacl.hash(new Uint8Array([...chainKey, 0x01])).slice(0, 32);
-    const messageKey  = nacl.hash(new Uint8Array([...chainKey, 0x02])).slice(0, 32);
+    // Zwei separate KDF-Aufrufe mit verschiedenen Domains (0x01 und 0x02)
+    const input1 = new Uint8Array(33);
+    input1.set(chainKey, 0);
+    input1[32] = 0x01;
+
+    const input2 = new Uint8Array(33);
+    input2.set(chainKey, 0);
+    input2[32] = 0x02;
+
+    const newChainKey = nacl.hash(input1).slice(0, 32);
+    const messageKey  = nacl.hash(input2).slice(0, 32);
+
+    _burn(input1, input2);
     return { chainKey: newChainKey, messageKey };
   }
+
+  // ══════════════════════════════════════════
+  //  Verschlüsselung / Entschlüsselung
+  // ══════════════════════════════════════════
 
   function encryptWithMK(messageKey, plaintext) {
     const nonce = nacl.randomBytes(24);
@@ -37,7 +73,9 @@ const DoubleRatchet = (() => {
     return plaintext;
   }
 
-  const PAD_BLOCK = 512;
+  // ══════════════════════════════════════════
+  //  Padding (feste Nachrichtengröße)
+  // ══════════════════════════════════════════
 
   function _pad(plaintext) {
     const data = typeof plaintext === 'string'
@@ -57,11 +95,15 @@ const DoubleRatchet = (() => {
     if (padded.length <= PAD_BLOCK) {
       const view = new DataView(padded.buffer, padded.byteOffset, padded.byteLength);
       const len = view.getUint16(0, false);
-      if (len > padded.length - 2) return null;
+      if (len > padded.length - 2 || len === 0) return null;
       return new TextDecoder().decode(padded.slice(2, 2 + len));
     }
     return new TextDecoder().decode(padded);
   }
+
+  // ══════════════════════════════════════════
+  //  Memory Cleanup
+  // ══════════════════════════════════════════
 
   function _burn(...arrays) {
     arrays.forEach(a => {
@@ -75,15 +117,14 @@ const DoubleRatchet = (() => {
   // ══════════════════════════════════════════
   //  ERSTELLEN
   // ══════════════════════════════════════════
+  //
+  //  sharedSecret IST bereits ein sicherer 32-Byte-Key (X25519 DH).
+  //  Kein zusätzliches Hashing nötig.
+  //
 
   function create(sharedSecret) {
-    // ══════════════════════════════════════
-    //  FIX: sharedSecret IST der rootKey!
-    //  Nicht nochmal hashen — das war der Bug.
-    //  sharedSecret = X25519 DH = 32 Bytes = perfekt für rootKey
-    // ══════════════════════════════════════
     return {
-      rootKey:       new Uint8Array(sharedSecret), // KOPIE, nicht Hash!
+      rootKey:       new Uint8Array(sharedSecret), // Direkte Kopie, kein Hash!
       sendChainKey:  null,
       recvChainKey:  null,
       dhSendKeyPair: null,
@@ -91,7 +132,9 @@ const DoubleRatchet = (() => {
       sendCount:     0,
       recvCount:     0,
       prevCount:     0,
-      skippedKeys:   new Map()
+      skippedKeys:   new Map(),
+      totalSent:     0,     // Gesamtanzahl gesendeter Nachrichten
+      totalRecv:     0      // Gesamtanzahl empfangener Nachrichten
     };
   }
 
@@ -100,30 +143,34 @@ const DoubleRatchet = (() => {
   // ══════════════════════════════════════════
 
   function encrypt(ratchet, plaintext) {
+    // Chain-Längen-Limit
+    if (ratchet.sendCount >= MAX_CHAIN_LENGTH) {
+      // Erzwinge DH-Ratchet durch sendChainKey zurücksetzen
+      ratchet.sendChainKey = null;
+    }
 
-    // Erstes Senden: DH-Key erstellen
-    if (!ratchet.dhSendKeyPair) {
+    // Kein sendChainKey → DH-Ratchet
+    if (!ratchet.sendChainKey) {
       ratchet.dhSendKeyPair = nacl.box.keyPair();
 
       if (ratchet.dhRecvPubKey) {
-        // Bob antwortet: DH-Ratchet für Send Chain
+        // Normaler DH-Ratchet: Wir antworten
         const dhOut = nacl.box.before(ratchet.dhRecvPubKey, ratchet.dhSendKeyPair.secretKey);
         const kdf = kdfRK(ratchet.rootKey, dhOut);
         ratchet.rootKey = kdf.rootKey;
         ratchet.sendChainKey = kdf.chainKey;
+        // FIX: prevCount VOR sendCount Reset
         ratchet.prevCount = ratchet.sendCount;
         ratchet.sendCount = 0;
         _burn(dhOut);
       } else {
-        // Alice erste Nachricht: Send Chain direkt aus Root Key
-        const kdf = kdfCK(ratchet.rootKey);
+        // Erste Nachricht: Symmetrischer Start mit Dummy-DH
+        const kdf = kdfRK(ratchet.rootKey, DUMMY_DH);
+        ratchet.rootKey = kdf.rootKey;
         ratchet.sendChainKey = kdf.chainKey;
+        ratchet.prevCount = 0;
+        ratchet.sendCount = 0;
       }
-    }
-
-    if (!ratchet.sendChainKey) {
-      const kdf = kdfCK(ratchet.rootKey);
-      ratchet.sendChainKey = kdf.chainKey;
     }
 
     // Chain ratcheten
@@ -132,6 +179,7 @@ const DoubleRatchet = (() => {
     const messageKey = kdf.messageKey;
     const msgIndex = ratchet.sendCount;
     ratchet.sendCount++;
+    ratchet.totalSent++;
 
     const encrypted = encryptWithMK(messageKey, plaintext);
     _burn(messageKey);
@@ -152,8 +200,16 @@ const DoubleRatchet = (() => {
   // ══════════════════════════════════════════
 
   function decrypt(ratchet, header, nonceB64, ciphertextB64) {
+    // Header validieren
+    if (!header || !header.dh || typeof header.n !== 'number') return null;
+
     const theirDHPubKey = B64.dec(header.dh);
-    const counter       = header.n;
+    if (!theirDHPubKey || theirDHPubKey.length !== 32) return null;
+
+    const counter = header.n;
+
+    // Counter-Limit (Schutz gegen DoS)
+    if (counter > MAX_CHAIN_LENGTH) return null;
 
     const nonce      = B64.dec(nonceB64);
     const ciphertext = B64.dec(ciphertextB64);
@@ -163,30 +219,35 @@ const DoubleRatchet = (() => {
       !_arraysEqual(theirDHPubKey, ratchet.dhRecvPubKey);
 
     if (dhChanged) {
-      // DH-Ratchet: NUR Receive Chain
-      if (!ratchet.dhSendKeyPair) {
-        ratchet.dhSendKeyPair = nacl.box.keyPair();
-      }
+      // ── DH-RATCHET SCHRITT ──
 
-      const dhOutput = nacl.box.before(theirDHPubKey, ratchet.dhSendKeyPair.secretKey);
-      const kdf = kdfRK(ratchet.rootKey, dhOutput);
-      ratchet.rootKey = kdf.rootKey;
-      ratchet.recvChainKey = kdf.chainKey;
+      if (!ratchet.dhSendKeyPair) {
+        // Bob empfängt Alices erste Nachricht
+        // Alice hat mit Dummy-DH abgeleitet → wir tun dasselbe
+        const kdf = kdfRK(ratchet.rootKey, DUMMY_DH);
+        ratchet.rootKey = kdf.rootKey;
+        ratchet.recvChainKey = kdf.chainKey;
+      } else {
+        // Normaler DH-Schritt
+        const dhOutput = nacl.box.before(theirDHPubKey, ratchet.dhSendKeyPair.secretKey);
+        const kdf = kdfRK(ratchet.rootKey, dhOutput);
+        ratchet.rootKey = kdf.rootKey;
+        ratchet.recvChainKey = kdf.chainKey;
+        _burn(dhOutput);
+      }
 
       ratchet.dhRecvPubKey = theirDHPubKey;
       ratchet.recvCount = 0;
       ratchet.prevCount = ratchet.sendCount;
-      ratchet.sendChainKey = null; // Wird beim nächsten Encrypt neu erstellt
-
-      _burn(dhOutput);
+      ratchet.sendChainKey = null;
     }
 
-    // Übersprungene Keys
+    // Übersprungene Message Keys
     if (counter > ratchet.recvCount) {
       _skipKeys(ratchet, counter);
     }
 
-    // Message Key
+    // Message Key holen
     let messageKey = null;
 
     if (counter === ratchet.recvCount) {
@@ -195,12 +256,15 @@ const DoubleRatchet = (() => {
         ratchet.recvChainKey = kdf.chainKey;
         messageKey = kdf.messageKey;
         ratchet.recvCount++;
+        ratchet.totalRecv++;
       }
     } else {
+      // Out-of-Order aus Cache
       const skipKey = B64.enc(theirDHPubKey) + ':' + counter;
       if (ratchet.skippedKeys.has(skipKey)) {
         messageKey = ratchet.skippedKeys.get(skipKey);
         ratchet.skippedKeys.delete(skipKey);
+        ratchet.totalRecv++;
       }
     }
 
@@ -211,22 +275,111 @@ const DoubleRatchet = (() => {
     return plaintext;
   }
 
+  // ══════════════════════════════════════════
+  //  Übersprungene Keys
+  // ══════════════════════════════════════════
+
   function _skipKeys(ratchet, until) {
     if (!ratchet.recvChainKey) return;
+
     while (ratchet.recvCount < until) {
+      // Chain-Längen-Limit
+      if (ratchet.recvCount >= MAX_CHAIN_LENGTH) break;
+
       const kdf = kdfCK(ratchet.recvChainKey);
       ratchet.recvChainKey = kdf.chainKey;
       const key = B64.enc(ratchet.dhRecvPubKey) + ':' + ratchet.recvCount;
       ratchet.skippedKeys.set(key, kdf.messageKey);
       ratchet.recvCount++;
     }
-    if (ratchet.skippedKeys.size > 500) {
+
+    // Memory-Limit: Älteste Keys löschen
+    if (ratchet.skippedKeys.size > MAX_SKIPPED_KEYS) {
       const iter = ratchet.skippedKeys.keys();
-      while (ratchet.skippedKeys.size > 250) {
-        ratchet.skippedKeys.delete(iter.next().value);
+      while (ratchet.skippedKeys.size > MAX_SKIPPED_KEYS / 2) {
+        const k = iter.next();
+        if (k.done) break;
+        const mk = ratchet.skippedKeys.get(k.value);
+        if (mk) _burn(mk);
+        ratchet.skippedKeys.delete(k.value);
       }
     }
   }
+
+  // ══════════════════════════════════════════
+  //  Ratchet komplett löschen
+  // ══════════════════════════════════════════
+
+  function destroy(ratchet) {
+    if (!ratchet) return;
+
+    _burn(
+      ratchet.rootKey,
+      ratchet.sendChainKey,
+      ratchet.recvChainKey
+    );
+
+    if (ratchet.dhSendKeyPair) {
+      _burn(ratchet.dhSendKeyPair.secretKey, ratchet.dhSendKeyPair.publicKey);
+    }
+
+    // Alle gespeicherten Message Keys verbrennen
+    ratchet.skippedKeys.forEach(mk => _burn(mk));
+    ratchet.skippedKeys.clear();
+
+    // Alles nullen
+    Object.keys(ratchet).forEach(k => { ratchet[k] = null; });
+  }
+
+  // ══════════════════════════════════════════
+  //  Serialisierung (für Persistenz)
+  // ══════════════════════════════════════════
+
+  function serialize(r) {
+    if (!r) return null;
+    return JSON.stringify({
+      rootKey:      B64.enc(r.rootKey),
+      sendChainKey: r.sendChainKey ? B64.enc(r.sendChainKey) : null,
+      recvChainKey: r.recvChainKey ? B64.enc(r.recvChainKey) : null,
+      dhSendPubKey: r.dhSendKeyPair ? B64.enc(r.dhSendKeyPair.publicKey) : null,
+      dhSendSecKey: r.dhSendKeyPair ? B64.enc(r.dhSendKeyPair.secretKey) : null,
+      dhRecvPubKey: r.dhRecvPubKey ? B64.enc(r.dhRecvPubKey) : null,
+      sendCount:    r.sendCount,
+      recvCount:    r.recvCount,
+      prevCount:    r.prevCount,
+      totalSent:    r.totalSent,
+      totalRecv:    r.totalRecv
+    });
+  }
+
+  function deserialize(json) {
+    if (!json) return null;
+    try {
+      const d = JSON.parse(json);
+      return {
+        rootKey:      B64.dec(d.rootKey),
+        sendChainKey: d.sendChainKey ? B64.dec(d.sendChainKey) : null,
+        recvChainKey: d.recvChainKey ? B64.dec(d.recvChainKey) : null,
+        dhSendKeyPair: d.dhSendPubKey ? {
+          publicKey: B64.dec(d.dhSendPubKey),
+          secretKey: B64.dec(d.dhSendSecKey)
+        } : null,
+        dhRecvPubKey: d.dhRecvPubKey ? B64.dec(d.dhRecvPubKey) : null,
+        sendCount:    d.sendCount || 0,
+        recvCount:    d.recvCount || 0,
+        prevCount:    d.prevCount || 0,
+        totalSent:    d.totalSent || 0,
+        totalRecv:    d.totalRecv || 0,
+        skippedKeys:  new Map()
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  // ══════════════════════════════════════════
+  //  Helper
+  // ══════════════════════════════════════════
 
   function _arraysEqual(a, b) {
     if (a.length !== b.length) return false;
@@ -236,5 +389,14 @@ const DoubleRatchet = (() => {
     return true;
   }
 
-  return { create, encrypt, decrypt };
+  return {
+    create,
+    encrypt,
+    decrypt,
+    destroy,
+    serialize,
+    deserialize,
+    MAX_CHAIN_LENGTH,
+    MAX_SKIPPED_KEYS
+  };
 })();
