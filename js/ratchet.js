@@ -1,17 +1,20 @@
 /* ═══════════════════════════════════════════════════
    ratchet.js — Double Ratchet (KORRIGIERT)
-   
-   Fix: Asymmetrische Initialisierung
-   - Alice (Initiator): Erzeugt DH-Keys VOR erstem Senden
-   - Bob (Responder): Erzeugt DH-Keys beim ersten Empfang
+
+   Ablauf:
+   1. Beide starten mit sharedSecret als rootKey
+   2. Alice: sendChainKey = KDF(rootKey), sendet erste Nachricht
+   3. Bob: recvChainKey = KDF(rootKey + DH(Alice)), empfängt
+   4. Bob: sendChainKey = KDF(rootKey + DH(Bob)), antwortet
+   5. Alice: recvChainKey = KDF(rootKey + DH(Bob)), empfängt
+   6. Ab jetzt: normales DH-Ratchet bei Richtungswechsel
    ═══════════════════════════════════════════════════ */
 
 const DoubleRatchet = (() => {
 
-  // ── KDF (Key Derivation Function) ──
+  // ── KDF ──
 
   function kdfRK(rootKey, dhOutput) {
-    // Root Key + DH Output → neuen Root Key + Chain Key
     const hmac = nacl.hash(new Uint8Array([...rootKey, ...dhOutput]));
     return {
       rootKey:  hmac.slice(0, 32),
@@ -20,13 +23,12 @@ const DoubleRatchet = (() => {
   }
 
   function kdfCK(chainKey) {
-    // Chain Key → neuen Chain Key + Message Key
     const newChainKey = nacl.hash(new Uint8Array([...chainKey, 0x01])).slice(0, 32);
     const messageKey  = nacl.hash(new Uint8Array([...chainKey, 0x02])).slice(0, 32);
     return { chainKey: newChainKey, messageKey };
   }
 
-  // ── Verschlüsselung mit Message Key ──
+  // ── Verschlüsselung ──
 
   function encryptWithMK(messageKey, plaintext) {
     const nonce = nacl.randomBytes(24);
@@ -44,7 +46,7 @@ const DoubleRatchet = (() => {
     return plaintext;
   }
 
-  // ── Padding (feste Nachrichtengröße) ──
+  // ── Padding ──
 
   const PAD_BLOCK = 512;
 
@@ -52,7 +54,7 @@ const DoubleRatchet = (() => {
     const data = typeof plaintext === 'string'
       ? new TextEncoder().encode(plaintext)
       : plaintext;
-    if (data.length > PAD_BLOCK - 2) return data; // Zu lang, kein Padding
+    if (data.length > PAD_BLOCK - 2) return data;
     const padded = new Uint8Array(PAD_BLOCK);
     const view = new DataView(padded.buffer);
     view.setUint16(0, data.length, false);
@@ -82,27 +84,25 @@ const DoubleRatchet = (() => {
   }
 
   // ══════════════════════════════════════════
-  //  RATCHET ERSTELLEN
+  //  ERSTELLEN
   // ══════════════════════════════════════════
   //
-  //  Beide Seiten starten symmetrisch:
-  //  - rootKey = sharedSecret
-  //  - sendChainKey/recvChainKey = null (werden bei Bedarf erstellt)
-  //  - dhSendKeyPair = null (wird bei erstem Senden/Empfangen erstellt)
-  //  - dhRecvPubKey = null (kommt aus dem Header der Gegenseite)
+  //  Beide Seiten starten identisch:
+  //  rootKey = SHA-512(sharedSecret)[0..31]
+  //  Alles andere = null
   //
 
   function create(sharedSecret) {
     return {
-      rootKey:      nacl.hash(sharedSecret).slice(0, 32),
-      sendChainKey: null,
-      recvChainKey: null,
-      dhSendKeyPair: null,   // Wird bei erstem Encrypt/Decrypt erstellt
-      dhRecvPubKey: null,    // Kommt aus Message-Header
-      sendCount:    0,
-      recvCount:    0,
-      prevCount:    0,
-      skippedKeys:  new Map()
+      rootKey:       nacl.hash(sharedSecret).slice(0, 32),
+      sendChainKey:  null,
+      recvChainKey:  null,
+      dhSendKeyPair: null,
+      dhRecvPubKey:  null,
+      sendCount:     0,
+      recvCount:     0,
+      prevCount:     0,
+      skippedKeys:   new Map()
     };
   }
 
@@ -111,13 +111,14 @@ const DoubleRatchet = (() => {
   // ══════════════════════════════════════════
 
   function encrypt(ratchet, plaintext) {
-    // Erstes Senden? DH-Keys erstellen
+
+    // ── Erstes Senden: DH-Key erstellen ──
     if (!ratchet.dhSendKeyPair) {
       ratchet.dhSendKeyPair = nacl.box.keyPair();
 
       if (ratchet.dhRecvPubKey) {
-        // Wir haben bereits einen empfangenen DH-Key
-        // → DH-Ratchet durchführen
+        // Wir haben bereits einen empfangenen DH-Key (wir sind Bob, antworten)
+        // → DH-Ratchet für Send Chain
         const dhOut = nacl.box.before(ratchet.dhRecvPubKey, ratchet.dhSendKeyPair.secretKey);
         const kdf = kdfRK(ratchet.rootKey, dhOut);
         ratchet.rootKey = kdf.rootKey;
@@ -126,27 +127,25 @@ const DoubleRatchet = (() => {
         ratchet.sendCount = 0;
         _burn(dhOut);
       } else {
-        // Erste Nachricht überhaupt
-        // → Send Chain direkt aus Root Key ableiten
+        // Wir sind Alice, erste Nachricht überhaupt
+        // → Send Chain direkt aus Root Key
         const kdf = kdfCK(ratchet.rootKey);
         ratchet.sendChainKey = kdf.chainKey;
       }
     }
 
     if (!ratchet.sendChainKey) {
-      // Fallback: Chain aus Root Key starten
       const kdf = kdfCK(ratchet.rootKey);
       ratchet.sendChainKey = kdf.chainKey;
     }
 
-    // Chain ratcheten → Message Key
+    // Chain ratcheten
     const kdf = kdfCK(ratchet.sendChainKey);
     ratchet.sendChainKey = kdf.chainKey;
     const messageKey = kdf.messageKey;
     const msgIndex = ratchet.sendCount;
     ratchet.sendCount++;
 
-    // Verschlüsseln
     const encrypted = encryptWithMK(messageKey, plaintext);
     _burn(messageKey);
 
@@ -178,23 +177,19 @@ const DoubleRatchet = (() => {
       !_arraysEqual(theirDHPubKey, ratchet.dhRecvPubKey);
 
     if (dhChanged) {
-      // ═══ DH-RATCHET SCHRITT ═══
-      
+      // ══════════════════════════════════════
+      //  DH-RATCHET SCHRITT (NUR Receive Chain!)
+      // ══════════════════════════════════════
+
       // Unseren DH-Key erstellen falls noch keiner da ist
+      // (Bob beim ersten Empfang)
       if (!ratchet.dhSendKeyPair) {
         ratchet.dhSendKeyPair = nacl.box.keyPair();
       }
 
-      // Receive Chain mit altem DH-Key updaten
-      // (Bei der ersten Nachricht ist recvChainKey noch null)
-      if (ratchet.recvChainKey) {
-        // Bereits eine Receive Chain → normales Update
-      }
-
-      // DH-Output berechnen: unser Secret Key + ihr Public Key
+      // NUR Receive Chain updaten (mit unserem aktuellen DH-Key)
+      // NICHT den DH-Key rotieren — das passiert beim nächsten Senden
       const dhOutput = nacl.box.before(theirDHPubKey, ratchet.dhSendKeyPair.secretKey);
-
-      // Root Key + Chain Key ableiten
       const kdf = kdfRK(ratchet.rootKey, dhOutput);
       ratchet.rootKey = kdf.rootKey;
       ratchet.recvChainKey = kdf.chainKey;
@@ -203,23 +198,16 @@ const DoubleRatchet = (() => {
       ratchet.dhRecvPubKey = theirDHPubKey;
       ratchet.recvCount = 0;
       ratchet.prevCount = ratchet.sendCount;
-      ratchet.sendCount = 0;
+      // sendCount NICHT zurücksetzen — das passiert beim nächsten Encrypt
 
-      // Neuen DH-Schlüssel für Senden erzeugen
-      const newDHKeyPair = nacl.box.keyPair();
-      
-      // Send Chain mit neuem DH-Key updaten
-      const dhOutput2 = nacl.box.before(theirDHPubKey, newDHKeyPair.secretKey);
-      const kdf2 = kdfRK(ratchet.rootKey, dhOutput2);
-      ratchet.rootKey = kdf2.rootKey;
-      ratchet.sendChainKey = kdf2.chainKey;
-      
-      ratchet.dhSendKeyPair = newDHKeyPair;
+      _burn(dhOutput);
 
-      _burn(dhOutput, dhOutput2);
+      // WICHTIG: sendChainKey = null, damit beim nächsten Encrypt
+      // ein neuer DH-Key erzeugt und die Send Chain aktualisiert wird
+      ratchet.sendChainKey = null;
     }
 
-    // Übersprungene Message Keys holen/speichern
+    // Übersprungene Message Keys
     if (counter > ratchet.recvCount) {
       _skipKeys(ratchet, counter);
     }
@@ -228,7 +216,6 @@ const DoubleRatchet = (() => {
     let messageKey = null;
 
     if (counter === ratchet.recvCount) {
-      // Normale nächste Nachricht aus der Chain
       if (ratchet.recvChainKey) {
         const kdf = kdfCK(ratchet.recvChainKey);
         ratchet.recvChainKey = kdf.chainKey;
@@ -236,7 +223,6 @@ const DoubleRatchet = (() => {
         ratchet.recvCount++;
       }
     } else {
-      // Übersprungene Nachricht
       const skipKey = B64.enc(theirDHPubKey) + ':' + counter;
       if (ratchet.skippedKeys.has(skipKey)) {
         messageKey = ratchet.skippedKeys.get(skipKey);
@@ -244,22 +230,18 @@ const DoubleRatchet = (() => {
       }
     }
 
-    if (!messageKey) {
-      return null;
-    }
+    if (!messageKey) return null;
 
-    // Entschlüsseln
     const plaintext = decryptWithMK(messageKey, nonce, ciphertext);
     _burn(messageKey);
-
     return plaintext;
   }
 
-  // ── Übersprungene Keys speichern ──
+  // ── Übersprungene Keys ──
 
   function _skipKeys(ratchet, until) {
     if (!ratchet.recvChainKey) return;
-    
+
     while (ratchet.recvCount < until) {
       const kdf = kdfCK(ratchet.recvChainKey);
       ratchet.recvChainKey = kdf.chainKey;
@@ -268,7 +250,6 @@ const DoubleRatchet = (() => {
       ratchet.recvCount++;
     }
 
-    // Max 500 gespeicherte Keys
     if (ratchet.skippedKeys.size > 500) {
       const iter = ratchet.skippedKeys.keys();
       while (ratchet.skippedKeys.size > 250) {
