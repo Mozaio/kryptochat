@@ -1,18 +1,18 @@
 /* ═══════════════════════════════════════════
-   ui.js — DOM-Manipulation & Rendering
+   ui.js — DOM-Manipulation
    ═══════════════════════════════════════════ */
 
 const UI = (() => {
 
   function log(msg, cls) {
-    const logEl = $('log');
-    if (!logEl) return;
+    const el = $('log');
+    if (!el) return;
     const t = new Date().toLocaleTimeString('de-DE');
     const d = document.createElement('div');
     d.className = cls || '';
     d.textContent = `[${t}] ${msg}`;
-    logEl.appendChild(d);
-    logEl.scrollTop = logEl.scrollHeight;
+    el.appendChild(d);
+    el.scrollTop = el.scrollHeight;
   }
 
   function initLogToggle() {
@@ -25,7 +25,12 @@ const UI = (() => {
     if (mc) requestAnimationFrame(() => { mc.scrollTop = mc.scrollHeight; });
   }
 
-  function addMessage(sender, text, isOutgoing) {
+  // Peer-ID anzeigen: nur die ersten 8 Zeichen der anonymen ID
+  function shortId(id) {
+    return id.slice(0, 8) + '...';
+  }
+
+  function addMessage(senderId, text, isOutgoing) {
     const es = $('es');
     if (es) es.remove();
 
@@ -34,7 +39,7 @@ const UI = (() => {
     const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
     g.innerHTML = `
-      ${!isOutgoing ? `<div class="ms">${esc(sender)}</div>` : ''}
+      ${!isOutgoing ? `<div class="ms">${esc(shortId(senderId))}</div>` : ''}
       <div class="mb">${esc(text)}</div>
       <div class="mm"><span class="mt">${t}</span></div>
     `;
@@ -72,14 +77,14 @@ const UI = (() => {
       const li = document.createElement('li');
       li.className = 'p-i';
 
-      let dotClass = s.verified ? 'sd' : 'sd w';
-      let btnLabel = s.verified ? '✓' : (s.established ? '⚠' : '?');
-      let btnClass = s.verified ? 'bv ok' : 'bv';
+      const dotClass = s.verified ? 'sd' : 'sd w';
+      const btnLabel = s.verified ? '✓' : (s.established ? '⚠' : '?');
+      const btnClass = s.verified ? 'bv ok' : 'bv';
 
       li.innerHTML = `
         <div class="p-inf">
           <div class="${dotClass}"></div>
-          <span class="p-nm">${id}</span>
+          <span class="p-nm">${esc(shortId(id))}</span>
         </div>
         <button class="${btnClass}" data-p="${id}">${btnLabel}</button>
       `;
@@ -96,10 +101,6 @@ const UI = (() => {
 
   function hideFingerprint() {
     $('fpm').classList.remove('v');
-  }
-
-  function updateStats(count) {
-    $('sm').textContent = count;
   }
 
   function showRoom(roomName) {
@@ -128,7 +129,6 @@ const UI = (() => {
     log, initLogToggle, scrollToBottom,
     addMessage, addSystem,
     updatePeers, showFingerprint, hideFingerprint,
-    updateStats, showRoom,
-    setJoinStatus, setJoinDisabled
+    showRoom, setJoinStatus, setJoinDisabled
   };
 })();
