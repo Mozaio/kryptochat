@@ -4,6 +4,7 @@
 
 const UI = (() => {
 
+  // Debug-Log (versteckt, nur für Entwicklung)
   function log(msg, cls) {
     const el = $('log');
     if (!el) return;
@@ -25,9 +26,8 @@ const UI = (() => {
     if (mc) requestAnimationFrame(() => { mc.scrollTop = mc.scrollHeight; });
   }
 
-  // Peer-ID anzeigen: nur die ersten 8 Zeichen der anonymen ID
   function shortId(id) {
-    return id.slice(0, 8) + '...';
+    return id.slice(0, 8) + '..';
   }
 
   function addMessage(senderId, text, isOutgoing) {
@@ -69,7 +69,7 @@ const UI = (() => {
     }
 
     $('onc').textContent = sessionsMap.size + 1;
-    $('est').textContent = sessionsMap.size + ' Peer(s)';
+    $('est').textContent = `${sessionsMap.size} Peer${sessionsMap.size > 1 ? 's' : ''}`;
     $('est').style.color = 'var(--gn)';
 
     pl.innerHTML = '';
