@@ -352,40 +352,50 @@
   }
 
   // ══════════════════════════════════════════
-  //  HEARTBEATS
+  //  HEARTBEATS — NICHT als Nachricht anzeigen
   // ══════════════════════════════════════════
 
   function handleHeartbeat(d) {
-    handleEncrypted(d);
-  }
+    // Heartbeat NUR zum Keep-Alive, nicht als Nachricht anzeigen
+    // Wir entschlüsseln ihn trotzdem, um die Ratchet-State synchron zu halten
 
-  setInterval(() => {
-    if (!connected) return;
-    for (const [peerId, session] of Session.getAll()) {
-      if (session.established && session.verified && Session.needsHeartbeat(peerId)) {
-        sendHeartbeat(peerId);
-        Session.recordHeartbeat(peerId);
+    // Ziel-Session finden
+    let targetPeerId = null;
+
+    if (d.si && d.sn) {
+      for (const [peerId, session] of Session.getAll()) {
+        if (!session.sealedKey || !session.established) continue;
+        const senderId = Session.unsealSenderId(session.sealedKey, d.si, d.sn);
+        if (senderId === peerId) {
+          targetPeerId = peerId;
+          break;
+        }
       }
     }
-  }, 15000);
 
-  function sendHeartbeat(peerId) {
-    const session = Session.getSession(peerId);
-    if (!session || !session.ratchet) return;
+    if (!targetPeerId) {
+      // Fallback: Erste Session mit Ratchet
+      for (const [peerId, session] of Session.getAll()) {
+        if (session.ratchet) {
+          targetPeerId = peerId;
+          break;
+        }
+      }
+    }
 
-    const encrypted = Session.encryptMessage(peerId, 'hb:' + Date.now());
-    if (!encrypted) return;
+    if (!targetPeerId) return;
 
-    const sealed = Session.sealSenderId(session.sealedKey, myAnonId);
-
-    relayTo(peerId, {
-      type: 'heartbeat',
-      h: encrypted.header,
-      n: encrypted.nonce,
-      c: encrypted.ciphertext,
-      si: sealed.sealedId,
-      sn: sealed.sealedNonce
-    });
+    try {
+      // NUR entschlüsseln (für Ratchet-Sync), aber NICHT anzeigen
+      const plaintext = Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
+      if (plaintext !== null && plaintext.startsWith('hb:')) {
+        // Heartbeat erkannt → Session-Timestamp updaten
+        Session.recordHeartbeat(targetPeerId);
+        return; // ← NICHT als Nachricht anzeigen
+      }
+    } catch (e) {
+      // Still — Heartbeat-Fehler ignorieren
+    }
   }
 
   // ══════════════════════════════════════════
