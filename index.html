@@ -5,30 +5,27 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kryptochat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 
-<!-- ── Join Overlay ── -->
 <div class="ov" id="ov">
   <div class="cd">
     <div class="ico">🔐</div>
     <h1>KRYPTOCHAT</h1>
-    <p class="sub">NaCl Box · X25519 + XSalsa20-Poly1305<br>Jede Nachricht eigenständig verschlüsselt</p>
+    <p class="sub">NaCl Box · X25519 + XSalsa20-Poly1305<br>Trustless Relay · Kein Vertrauen in den Server</p>
     <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
     <button class="btn" id="jbtn">VERBINDEN</button>
     <div class="st" id="jst"></div>
   </div>
 </div>
 
-<!-- ── Fingerprint Modal ── -->
 <div class="fp" id="fpm">
   <div class="fp-c">
     <h3>Schlüssel verifizieren</h3>
-    <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner.</p>
+    <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner — über einen SICHEREN Zweitkanal (Signal, Telefon, persönlich).</p>
     <div class="fp-grid">
       <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
       <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
@@ -40,28 +37,18 @@
   </div>
 </div>
 
-<!-- ── App ── -->
 <div class="app" id="app">
-
-  <!-- Sidebar -->
   <aside class="sb">
     <div class="sb-h">
       <div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div>
     </div>
     <div class="sb-s">
-      <h4>Deine ID</h4>
+      <h4>Deine Anon-ID</h4>
       <div class="id-d" id="mid">—</div>
     </div>
     <div class="sb-s">
       <h4>Raum</h4>
       <div class="id-d" id="drm" style="text-align:center">—</div>
-    </div>
-    <div class="sb-s">
-      <h4>Statistik</h4>
-      <div class="st-b">
-        <div class="sl">Nachrichten</div>
-        <div class="sv" id="sm">0</div>
-      </div>
     </div>
     <div class="sb-s">
       <h4>Peers</h4>
@@ -71,20 +58,19 @@
     </div>
     <div class="sn">
       <p>
-        <span style="color:var(--gn-d)">●</span> NaCl box (X25519 + XSalsa20-Poly1305)<br>
-        <span style="color:var(--gn-d)">●</span> Ephemeral Keys pro Nachricht<br>
-        <span style="color:var(--gn-d)">●</span> Authenticated Encryption<br>
+        <span style="color:var(--gn-d)">●</span> Server sieht nur Chiffretext<br>
+        <span style="color:var(--gn-d)">●</span> Keine IPs geloggt<br>
+        <span style="color:var(--gn-d)">●</span> Kein Vertrauen nötig<br>
         <span style="color:var(--gn-d)">●</span> Forward Secrecy
       </p>
     </div>
   </aside>
 
-  <!-- Chat Main -->
   <main class="cm">
     <div class="ch">
       <div class="ch-l">
         <h2 id="ct">Kryptochat</h2>
-        <div class="eb"><span class="dot"></span> E2E</div>
+        <div class="eb"><span class="dot"></span> Trustless</div>
       </div>
       <div class="oc"><span id="onc">1</span> online</div>
     </div>
@@ -107,7 +93,6 @@
   </main>
 </div>
 
-<!-- ── Debug Log ── -->
 <div id="log"></div>
 <button id="toglog">LOG</button>
 
