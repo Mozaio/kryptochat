@@ -1,9 +1,11 @@
 /* ═══════════════════════════════════════════
-   session.js — Session-Management
+   session.js — Session mit persistenter Nonce
+   und Key Rotation
    ═══════════════════════════════════════════ */
 
 const Session = (() => {
-  const ROTATE_AFTER = 50;
+  const ROTATE_AFTER = 50;       // Nach 50 Nachrichten rotieren
+  const HEARTBEAT_INTERVAL = 20; // Sekunden
   const sessions = new Map();
   let _myLongTermPubKey = null;
 
@@ -12,18 +14,24 @@ const Session = (() => {
   }
 
   function createSession(peerAnonId, theirPubKey) {
-    const ephemeral = nacl.box.keyPair();
+    // Persistenten Nonce-Offset laden
+    const storedOffset = parseInt(Store.get(`nonce_${peerAnonId}`, '0'));
+
     const session = {
       peerAnonId,
       theirPubKey,
-      myEphemeral: ephemeral,
+      myEphemeral: null,          // Wird später gesetzt
       theirEphemeralPub: null,
       sharedSecret: null,
-      sendNonce: BigInt(0),
+      sendNonce: BigInt(storedOffset),
       recvNonces: new Set(),
       msgCount: 0,
       verified: false,
       established: false,
+      lastHeartbeat: 0,
+      heartbeatSeq: 0,
+      commitmentSent: false,
+      commitmentReceived: null,
       createdAt: Date.now()
     };
     sessions.set(peerAnonId, session);
@@ -37,18 +45,22 @@ const Session = (() => {
   function removeSession(peerAnonId) {
     const s = sessions.get(peerAnonId);
     if (s) {
-      if (s.sharedSecret) s.sharedSecret.fill(0);
-      if (s.myEphemeral?.secretKey) s.myEphemeral.secretKey.fill(0);
+      // Sensible Daten im Speicher überschreiben
+      burn(s.sharedSecret);
+      if (s.myEphemeral) burn(s.myEphemeral.secretKey);
+      if (s.myEphemeral) burn(s.myEphemeral.publicKey);
       sessions.delete(peerAnonId);
     }
   }
 
-  // Shared Secret berechnen: Kombiniert ephemeren Shared Secret + langfristige Keys
+  // ── Shared Secret berechnen ──
+  // Kombiniert ephemeren X25519 Shared Secret + langfristige Keys
   function computeSharedSecret(peerAnonId) {
     const session = sessions.get(peerAnonId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return Promise.resolve(false);
     if (!_myLongTermPubKey) return Promise.resolve(false);
 
+    // Ephemerer Shared Secret
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
@@ -69,6 +81,7 @@ const Session = (() => {
       lt2 = _myLongTermPubKey;
     }
 
+    // Kombinieren: ephemeralShared(32) + lt1(32) + lt2(32) = 96 Bytes
     const combined = new Uint8Array(96);
     combined.set(ephemeralShared, 0);
     combined.set(lt1, 32);
@@ -78,12 +91,21 @@ const Session = (() => {
       const fullHash = new Uint8Array(hashBuf);
       session.sharedSecret = fullHash.slice(0, 32);
       session.established = true;
-      combined.fill(0);
-      ephemeralShared.fill(0);
+
+      // Temporäre Daten bereinigen
+      burn(combined, ephemeralShared);
+      burn(fullHash);
+
       return true;
     });
   }
 
+  // ── Nonce persistieren ──
+  function persistNonce(peerAnonId, nonce) {
+    Store.set(`nonce_${peerAnonId}`, nonce.toString());
+  }
+
+  // ── Rotation ──
   function needsRotation(peerAnonId) {
     const s = sessions.get(peerAnonId);
     return s && s.msgCount >= ROTATE_AFTER;
@@ -93,12 +115,26 @@ const Session = (() => {
     const s = sessions.get(peerAnonId);
     if (!s) return null;
     const theirPubKey = s.theirPubKey;
+    const wasVerified = s.verified;
     removeSession(peerAnonId);
-    return createSession(peerAnonId, theirPubKey);
+    const newSession = createSession(peerAnonId, theirPubKey);
+    newSession.verified = wasVerified; // Verifizierung behalten
+    return newSession;
   }
 
   function getAll() {
     return sessions;
+  }
+
+  function needsHeartbeat(peerAnonId) {
+    const s = sessions.get(peerAnonId);
+    if (!s || !s.established) return false;
+    return (Date.now() - s.lastHeartbeat) > HEARTBEAT_INTERVAL * 1000;
+  }
+
+  function recordHeartbeat(peerAnonId) {
+    const s = sessions.get(peerAnonId);
+    if (s) s.lastHeartbeat = Date.now();
   }
 
   return {
@@ -107,8 +143,12 @@ const Session = (() => {
     getSession,
     removeSession,
     computeSharedSecret,
+    persistNonce,
     needsRotation,
     rotate,
-    getAll
+    getAll,
+    needsHeartbeat,
+    recordHeartbeat,
+    ROTATE_AFTER
   };
 })();
