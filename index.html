@@ -15,7 +15,7 @@
   <div class="cd">
     <div class="ico">🔐</div>
     <h1>KRYPTOCHAT</h1>
-    <p class="sub">NaCl Box · X25519 + XSalsa20-Poly1305<br>Trustless Relay · Kein Vertrauen in den Server</p>
+    <p class="sub">NaCl · X25519 + XSalsa20-Poly1305<br>Zero-Knowledge Relay · Forward Secrecy</p>
     <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
     <button class="btn" id="jbtn">VERBINDEN</button>
     <div class="st" id="jst"></div>
@@ -43,7 +43,7 @@
       <div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div>
     </div>
     <div class="sb-s">
-      <h4>Deine Anon-ID</h4>
+      <h4>Anon-ID</h4>
       <div class="id-d" id="mid">—</div>
     </div>
     <div class="sb-s">
@@ -58,10 +58,11 @@
     </div>
     <div class="sn">
       <p>
-        <span style="color:var(--gn-d)">●</span> Server sieht nur Chiffretext<br>
-        <span style="color:var(--gn-d)">●</span> Keine IPs geloggt<br>
-        <span style="color:var(--gn-d)">●</span> Kein Vertrauen nötig<br>
-        <span style="color:var(--gn-d)">●</span> Forward Secrecy
+        <span style="color:var(--gn-d)">●</span> Server: Zero Knowledge<br>
+        <span style="color:var(--gn-d)">●</span> Forward Secrecy<br>
+        <span style="color:var(--gn-d)">●</span> Commitment Key Exchange<br>
+        <span style="color:var(--gn-d)">●</span> Metadaten-Padding<br>
+        <span style="color:var(--gn-d)">●</span> Memory Cleanup
       </p>
     </div>
   </aside>
@@ -70,7 +71,7 @@
     <div class="ch">
       <div class="ch-l">
         <h2 id="ct">Kryptochat</h2>
-        <div class="eb"><span class="dot"></span> Trustless</div>
+        <div class="eb"><span class="dot"></span> Zero-Knowledge</div>
       </div>
       <div class="oc"><span id="onc">1</span> online</div>
     </div>
