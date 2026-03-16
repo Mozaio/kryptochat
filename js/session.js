@@ -1,17 +1,21 @@
-const Session = (function() {
-  var ROTATE_AFTER = 50;
-  var sessions = new Map();
-  var _myLongTermPubKey = null;
+/* ═══════════════════════════════════════════
+   session.js — Session-Management
+   ═══════════════════════════════════════════ */
+
+const Session = (() => {
+  const ROTATE_AFTER = 50;
+  const sessions = new Map();
+  let _myLongTermPubKey = null;
 
   function setMyLongTermKey(pubKey) {
     _myLongTermPubKey = pubKey;
   }
 
-  function createSession(peerId, theirPubKey) {
-    var ephemeral = nacl.box.keyPair();
-    var session = {
-      peerId: peerId,
-      theirPubKey: theirPubKey,
+  function createSession(peerAnonId, theirPubKey) {
+    const ephemeral = nacl.box.keyPair();
+    const session = {
+      peerAnonId,
+      theirPubKey,
       myEphemeral: ephemeral,
       theirEphemeralPub: null,
       sharedSecret: null,
@@ -22,38 +26,38 @@ const Session = (function() {
       established: false,
       createdAt: Date.now()
     };
-    sessions.set(peerId, session);
+    sessions.set(peerAnonId, session);
     return session;
   }
 
-  function getSession(peerId) {
-    return sessions.get(peerId);
+  function getSession(peerAnonId) {
+    return sessions.get(peerAnonId);
   }
 
-  function removeSession(peerId) {
-    var s = sessions.get(peerId);
+  function removeSession(peerAnonId) {
+    const s = sessions.get(peerAnonId);
     if (s) {
       if (s.sharedSecret) s.sharedSecret.fill(0);
-      if (s.myEphemeral && s.myEphemeral.secretKey) {
-        s.myEphemeral.secretKey.fill(0);
-      }
-      sessions.delete(peerId);
+      if (s.myEphemeral?.secretKey) s.myEphemeral.secretKey.fill(0);
+      sessions.delete(peerAnonId);
     }
   }
 
-  function computeSharedSecret(peerId) {
-    var session = sessions.get(peerId);
+  // Shared Secret berechnen: Kombiniert ephemeren Shared Secret + langfristige Keys
+  function computeSharedSecret(peerAnonId) {
+    const session = sessions.get(peerAnonId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return Promise.resolve(false);
     if (!_myLongTermPubKey) return Promise.resolve(false);
 
-    var ephemeralShared = nacl.box.before(
+    const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    var lt1, lt2;
-    var cmp = false;
-    for (var i = 0; i < 32; i++) {
+    // Canonical ordering der langfristigen Keys
+    let lt1, lt2;
+    let cmp = false;
+    for (let i = 0; i < 32; i++) {
       if (_myLongTermPubKey[i] < session.theirPubKey[i]) { cmp = true; break; }
       if (_myLongTermPubKey[i] > session.theirPubKey[i]) { cmp = false; break; }
     }
@@ -65,13 +69,13 @@ const Session = (function() {
       lt2 = _myLongTermPubKey;
     }
 
-    var combined = new Uint8Array(96);
+    const combined = new Uint8Array(96);
     combined.set(ephemeralShared, 0);
     combined.set(lt1, 32);
     combined.set(lt2, 64);
 
-    return crypto.subtle.digest('SHA-512', combined).then(function(hashBuf) {
-      var fullHash = new Uint8Array(hashBuf);
+    return crypto.subtle.digest('SHA-512', combined).then(hashBuf => {
+      const fullHash = new Uint8Array(hashBuf);
       session.sharedSecret = fullHash.slice(0, 32);
       session.established = true;
       combined.fill(0);
@@ -80,17 +84,17 @@ const Session = (function() {
     });
   }
 
-  function needsRotation(peerId) {
-    var s = sessions.get(peerId);
+  function needsRotation(peerAnonId) {
+    const s = sessions.get(peerAnonId);
     return s && s.msgCount >= ROTATE_AFTER;
   }
 
-  function rotate(peerId) {
-    var s = sessions.get(peerId);
+  function rotate(peerAnonId) {
+    const s = sessions.get(peerAnonId);
     if (!s) return null;
-    var theirPubKey = s.theirPubKey;
-    removeSession(peerId);
-    return createSession(peerId, theirPubKey);
+    const theirPubKey = s.theirPubKey;
+    removeSession(peerAnonId);
+    return createSession(peerAnonId, theirPubKey);
   }
 
   function getAll() {
@@ -98,13 +102,13 @@ const Session = (function() {
   }
 
   return {
-    setMyLongTermKey: setMyLongTermKey,
-    createSession: createSession,
-    getSession: getSession,
-    removeSession: removeSession,
-    computeSharedSecret: computeSharedSecret,
-    needsRotation: needsRotation,
-    rotate: rotate,
-    getAll: getAll
+    setMyLongTermKey,
+    createSession,
+    getSession,
+    removeSession,
+    computeSharedSecret,
+    needsRotation,
+    rotate,
+    getAll
   };
 })();
