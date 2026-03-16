@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════
-   session.js — Mit korrigiertem Ratchet-Init
+   session.js — Session-Management mit Double Ratchet
    ═══════════════════════════════════════════════════ */
 
 const Session = (() => {
@@ -39,37 +39,45 @@ const Session = (() => {
 
   function removeSession(peerAnonId) {
     const s = sessions.get(peerAnonId);
-    if (s) {
-      _burn(s.sharedSecret, s.sealedKey);
-      if (s.myEphemeral) _burn(s.myEphemeral.secretKey, s.myEphemeral.publicKey);
-      if (s.ratchet) {
-        _burn(s.ratchet.rootKey, s.ratchet.sendChainKey, s.ratchet.recvChainKey);
-        if (s.ratchet.dhSendKeyPair) {
-          _burn(s.ratchet.dhSendKeyPair.secretKey, s.ratchet.dhSendKeyPair.publicKey);
-        }
-      }
-      sessions.delete(peerAnonId);
+    if (!s) return;
+
+    // ── Shared Secret verbrennen ──
+    _burn(s.sharedSecret);
+    _burn(s.sealedKey);
+
+    // ── Ephemere Keys verbrennen ──
+    if (s.myEphemeral) {
+      _burn(s.myEphemeral.secretKey);
+      _burn(s.myEphemeral.publicKey);
     }
+
+    // ── Ratchet komplett zerstören ──
+    if (s.ratchet) {
+      DoubleRatchet.destroy(s.ratchet);
+    }
+
+    // ── Commitment-Daten verbrennen ──
+    if (s.myCommitment) _burn(s.myCommitment);
+    if (s.theirCommitment) _burn(s.theirCommitment);
+
+    // Session aus Map entfernen
+    sessions.delete(peerAnonId);
   }
 
   // ── Ratchet initialisieren ──
-  // BEIDE Seiten starten gleich!
-  // Alice: Erzeugt DH-Keys beim ersten encrypt()
-  // Bob:   Erzeugt DH-Keys beim ersten decrypt()
+  // Beide Seiten starten identisch mit sharedSecret
 
   function initRatchet(peerAnonId) {
     const session = sessions.get(peerAnonId);
     if (!session || !session.sharedSecret) return false;
 
-    // Ratchet mit sharedSecret initialisieren
-    // (asymmetrische DH-Keys werden bei erstem encrypt/decrypt erstellt)
+    // Double Ratchet mit sharedSecret starten
     session.ratchet = DoubleRatchet.create(session.sharedSecret);
 
-    // Sealed Sender Key ableiten
-    const sealedInput = new Uint8Array([
-      ...session.sharedSecret,
-      ...U8.enc('sealed-sender-v1')
-    ]);
+    // Sealed Sender Key ableiten (aus sharedSecret + Domain-Separator)
+    const sealedInput = new Uint8Array(64);
+    sealedInput.set(session.sharedSecret, 0);
+    sealedInput.set(U8.enc('sealed-sender-v1'), 32);
     session.sealedKey = nacl.hash(sealedInput).slice(0, 32);
     _burn(sealedInput);
 
@@ -77,6 +85,8 @@ const Session = (() => {
   }
 
   // ── Shared Secret berechnen ──
+  // Kombiniert ephemeren DH + langfristige Keys
+  // Initialisiert automatisch den Double Ratchet
 
   function computeSharedSecret(peerAnonId) {
     const session = sessions.get(peerAnonId);
@@ -85,21 +95,28 @@ const Session = (() => {
     }
     if (!_myLongTermPubKey) return Promise.resolve(false);
 
+    // Ephemeren Shared Secret berechnen
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    // Canonical ordering
+    // Canonical ordering der langfristigen Keys
     let lt1, lt2;
     let cmp = false;
     for (let i = 0; i < 32; i++) {
       if (_myLongTermPubKey[i] < session.theirPubKey[i]) { cmp = true; break; }
       if (_myLongTermPubKey[i] > session.theirPubKey[i]) { cmp = false; break; }
     }
-    if (cmp) { lt1 = _myLongTermPubKey; lt2 = session.theirPubKey; }
-    else     { lt1 = session.theirPubKey; lt2 = _myLongTermPubKey; }
+    if (cmp) {
+      lt1 = _myLongTermPubKey;
+      lt2 = session.theirPubKey;
+    } else {
+      lt1 = session.theirPubKey;
+      lt2 = _myLongTermPubKey;
+    }
 
+    // Kombinieren: ephemeralShared(32) + lt1(32) + lt2(32) = 96 Bytes
     const combined = new Uint8Array(96);
     combined.set(ephemeralShared, 0);
     combined.set(lt1, 32);
@@ -110,15 +127,19 @@ const Session = (() => {
       session.sharedSecret = fullHash.slice(0, 32);
       session.established = true;
 
-      // Ratchet initialisieren
+      // Double Ratchet initialisieren
       initRatchet(peerAnonId);
 
-      _burn(combined, ephemeralShared, fullHash);
+      // Temporäre Daten bereinigen
+      _burn(combined);
+      _burn(ephemeralShared);
+      _burn(fullHash);
+
       return true;
     });
   }
 
-  // ── Verschlüsseln ──
+  // ── Verschlüsseln (Double Ratchet) ──
 
   function encryptMessage(peerAnonId, plaintext) {
     const session = sessions.get(peerAnonId);
@@ -126,7 +147,7 @@ const Session = (() => {
     return DoubleRatchet.encrypt(session.ratchet, plaintext);
   }
 
-  // ── Entschlüsseln ──
+  // ── Entschlüsseln (Double Ratchet) ──
 
   function decryptMessage(peerAnonId, header, nonce, ciphertext) {
     const session = sessions.get(peerAnonId);
@@ -140,6 +161,7 @@ const Session = (() => {
     const nonce = nacl.randomBytes(24);
     const data = U8.enc(senderAnonId);
     const encrypted = nacl.secretbox(data, nonce, sealedKey);
+    _burn(data);
     return {
       sealedId: B64.enc(encrypted),
       sealedNonce: B64.enc(nonce)
@@ -175,6 +197,12 @@ const Session = (() => {
     return sessions;
   }
 
+  // ── Alle Sessions bereinigen ──
+
+  function destroyAll() {
+    sessions.forEach((_, id) => removeSession(id));
+  }
+
   // ── Helper ──
 
   function _burn(...arrays) {
@@ -199,6 +227,7 @@ const Session = (() => {
     unsealSenderId,
     needsHeartbeat,
     recordHeartbeat,
-    getAll
+    getAll,
+    destroyAll
   };
 })();
