@@ -1,11 +1,8 @@
-/* ═══════════════════════════════════════════
-   session.js — Session mit persistenter Nonce
-   und Key Rotation
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   session.js — Session-Management mit Double Ratchet
+   ═══════════════════════════════════════════════════ */
 
 const Session = (() => {
-  const ROTATE_AFTER = 50;       // Nach 50 Nachrichten rotieren
-  const HEARTBEAT_INTERVAL = 20; // Sekunden
   const sessions = new Map();
   let _myLongTermPubKey = null;
 
@@ -14,24 +11,22 @@ const Session = (() => {
   }
 
   function createSession(peerAnonId, theirPubKey) {
-    // Persistenten Nonce-Offset laden
-    const storedOffset = parseInt(Store.get(`nonce_${peerAnonId}`, '0'));
-
     const session = {
       peerAnonId,
       theirPubKey,
-      myEphemeral: null,          // Wird später gesetzt
+      myEphemeral: null,
       theirEphemeralPub: null,
       sharedSecret: null,
-      sendNonce: BigInt(storedOffset),
-      recvNonces: new Set(),
-      msgCount: 0,
+      ratchet: null,           // Double Ratchet State
+      sealedKey: null,         // Sealed Sender Key (abgeleitet)
       verified: false,
       established: false,
+      keySent: false,
+      myCommitment: null,
+      myCommitTimestamp: 0,
+      theirCommitment: null,
+      theirCommitTimestamp: 0,
       lastHeartbeat: 0,
-      heartbeatSeq: 0,
-      commitmentSent: false,
-      commitmentReceived: null,
       createdAt: Date.now()
     };
     sessions.set(peerAnonId, session);
@@ -45,28 +40,63 @@ const Session = (() => {
   function removeSession(peerAnonId) {
     const s = sessions.get(peerAnonId);
     if (s) {
-      // Sensible Daten im Speicher überschreiben
-      burn(s.sharedSecret);
-      if (s.myEphemeral) burn(s.myEphemeral.secretKey);
-      if (s.myEphemeral) burn(s.myEphemeral.publicKey);
+      // Sensible Daten im RAM überschreiben
+      _burn(s.sharedSecret, s.sealedKey);
+      if (s.myEphemeral) {
+        _burn(s.myEphemeral.secretKey, s.myEphemeral.publicKey);
+      }
+      if (s.ratchet) {
+        _burn(s.ratchet.rootKey, s.ratchet.sendChainKey, s.ratchet.recvChainKey);
+        if (s.ratchet.dhSendKeyPair) {
+          _burn(s.ratchet.dhSendKeyPair.secretKey, s.ratchet.dhSendKeyPair.publicKey);
+        }
+      }
       sessions.delete(peerAnonId);
     }
   }
 
-  // ── Shared Secret berechnen ──
-  // Kombiniert ephemeren X25519 Shared Secret + langfristige Keys
+  // ── Shared Secret + Double Ratchet Initialisierung ──
+
+  function initRatchet(peerAnonId) {
+    const session = sessions.get(peerAnonId);
+    if (!session || !session.sharedSecret) return false;
+
+    // Neues DH-Schlüsselpaar für den Ratchet
+    const dhKeyPair = nacl.box.keyPair();
+
+    // Ratchet initialisieren
+    session.ratchet = DoubleRatchet.create(dhKeyPair, session.sharedSecret);
+
+    // Sealed Sender Key ableiten
+    // Aus sharedSecret + "sealed" ein separater Key
+    const sealedInput = new Uint8Array([...session.sharedSecret, ...U8.enc('sealed-sender-v1')]);
+    session.sealedKey = nacl.hash(sealedInput).slice(0, 32);
+    _burn(sealedInput);
+
+    // Root Key für den Ratchet mit erstem DH-Schritt updaten
+    // Beide Seiten haben bereits die ephemeralen Keys aus dem Key Exchange
+    if (session.theirEphemeralPub) {
+      const dhOutput = nacl.box.before(session.theirEphemeralPub, dhKeyPair.secretKey);
+      // Diesen DH-Output im Ratchet verarbeiten
+      // (Der Initiator macht den ersten Schritt)
+    }
+
+    return true;
+  }
+
+  // ── Shared Secret berechnen (bleibt gleich) ──
+
   function computeSharedSecret(peerAnonId) {
     const session = sessions.get(peerAnonId);
     if (!session || !session.theirEphemeralPub || !session.myEphemeral) return Promise.resolve(false);
     if (!_myLongTermPubKey) return Promise.resolve(false);
 
-    // Ephemerer Shared Secret
     const ephemeralShared = nacl.box.before(
       session.theirEphemeralPub,
       session.myEphemeral.secretKey
     );
 
-    // Canonical ordering der langfristigen Keys
+    // Canonical ordering
     let lt1, lt2;
     let cmp = false;
     for (let i = 0; i < 32; i++) {
@@ -81,7 +111,6 @@ const Session = (() => {
       lt2 = _myLongTermPubKey;
     }
 
-    // Kombinieren: ephemeralShared(32) + lt1(32) + lt2(32) = 96 Bytes
     const combined = new Uint8Array(96);
     combined.set(ephemeralShared, 0);
     combined.set(lt1, 32);
@@ -92,49 +121,79 @@ const Session = (() => {
       session.sharedSecret = fullHash.slice(0, 32);
       session.established = true;
 
+      // Double Ratchet initialisieren
+      initRatchet(peerAnonId);
+
       // Temporäre Daten bereinigen
-      burn(combined, ephemeralShared);
-      burn(fullHash);
+      _burn(combined, ephemeralShared, fullHash);
 
       return true;
     });
   }
 
-  // ── Nonce persistieren ──
-  function persistNonce(peerAnonId, nonce) {
-    Store.set(`nonce_${peerAnonId}`, nonce.toString());
+  // ── Verschlüsseln mit Double Ratchet ──
+
+  function encryptMessage(peerAnonId, plaintext) {
+    const session = sessions.get(peerAnonId);
+    if (!session || !session.ratchet) return null;
+    return DoubleRatchet.encrypt(session.ratchet, plaintext);
   }
 
-  // ── Rotation ──
-  function needsRotation(peerAnonId) {
-    const s = sessions.get(peerAnonId);
-    return s && s.msgCount >= ROTATE_AFTER;
+  // ── Entschlüsseln mit Double Ratchet ──
+
+  function decryptMessage(peerAnonId, header, nonce, ciphertext) {
+    const session = sessions.get(peerAnonId);
+    if (!session || !session.ratchet) return null;
+    return DoubleRatchet.decrypt(session.ratchet, header, nonce, ciphertext);
   }
 
-  function rotate(peerAnonId) {
+  // ── Sealed Sender ──
+
+  function sealSenderId(sealedKey, senderAnonId) {
+    const nonce = nacl.randomBytes(24);
+    const data = U8.enc(senderAnonId);
+    const encrypted = nacl.secretbox(data, nonce, sealedKey);
+    return { sealedId: B64.enc(encrypted), sealedNonce: B64.enc(nonce) };
+  }
+
+  function unsealSenderId(sealedKey, sealedIdB64, sealedNonceB64) {
+    try {
+      const encrypted = B64.dec(sealedIdB64);
+      const nonce = B64.dec(sealedNonceB64);
+      const data = nacl.secretbox.open(encrypted, nonce, sealedKey);
+      if (!data) return null;
+      return U8.dec(data);
+    } catch {
+      return null;
+    }
+  }
+
+  // ── Heartbeat ──
+
+  function needsHeartbeat(peerAnonId) {
     const s = sessions.get(peerAnonId);
-    if (!s) return null;
-    const theirPubKey = s.theirPubKey;
-    const wasVerified = s.verified;
-    removeSession(peerAnonId);
-    const newSession = createSession(peerAnonId, theirPubKey);
-    newSession.verified = wasVerified; // Verifizierung behalten
-    return newSession;
+    if (!s || !s.established) return false;
+    return (Date.now() - s.lastHeartbeat) > 20000;
+  }
+
+  function recordHeartbeat(peerAnonId) {
+    const s = sessions.get(peerAnonId);
+    if (s) s.lastHeartbeat = Date.now();
   }
 
   function getAll() {
     return sessions;
   }
 
-  function needsHeartbeat(peerAnonId) {
-    const s = sessions.get(peerAnonId);
-    if (!s || !s.established) return false;
-    return (Date.now() - s.lastHeartbeat) > HEARTBEAT_INTERVAL * 1000;
-  }
+  // ── Hilfsfunktionen ──
 
-  function recordHeartbeat(peerAnonId) {
-    const s = sessions.get(peerAnonId);
-    if (s) s.lastHeartbeat = Date.now();
+  function _burn(...arrays) {
+    arrays.forEach(a => {
+      if (a && a instanceof Uint8Array) {
+        a.set(nacl.randomBytes(a.length));
+        a.fill(0);
+      }
+    });
   }
 
   return {
@@ -143,12 +202,13 @@ const Session = (() => {
     getSession,
     removeSession,
     computeSharedSecret,
-    persistNonce,
-    needsRotation,
-    rotate,
-    getAll,
+    initRatchet,
+    encryptMessage,
+    decryptMessage,
+    sealSenderId,
+    unsealSenderId,
     needsHeartbeat,
     recordHeartbeat,
-    ROTATE_AFTER
+    getAll
   };
 })();
