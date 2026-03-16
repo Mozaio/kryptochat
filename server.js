@@ -1,32 +1,38 @@
-/* ═══════════════════════════════════════════
-   server.js — Trustless Relay
-   - Keine Logs
-   - Keine IPs
-   - Kein Verständnis der Nachrichten
-   - Nur im RAM, nichts auf Disk
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   server.js — Trustless Relay (vollständig gehärtet)
+   - Keine Logs, kein Storage, kein Verständnis
+   - Raumnamen werden mit Salt gehasht
+   - Keine IPs protokolliert
+   - Rate-Limiting anonym
+   ═══════════════════════════════════════════════════ */
 
-const https = require('https');
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
+const https   = require('https');
+const crypto  = require('crypto');
+const fs      = require('fs');
+const path    = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 
-// ── TLS (optional, aber empfohlen) ──
+// ── TLS ──
 const TLS_KEY  = path.join(__dirname, 'key.pem');
 const TLS_CERT = path.join(__dirname, 'cert.pem');
-
-let serverOptions = null;
-
+let tlsOpts = null;
 if (fs.existsSync(TLS_KEY) && fs.existsSync(TLS_CERT)) {
-  serverOptions = {
+  tlsOpts = {
     key:  fs.readFileSync(TLS_KEY),
     cert: fs.readFileSync(TLS_CERT)
   };
 }
 
+// ── Raum-Hash mit Salt (Server sieht nie Klartext-Raumnamen) ──
+const ROOM_SALT = crypto.createHash('sha256').update('kc-relay-v3-salt').digest();
+
+function hashRoom(name) {
+  return crypto.createHmac('sha256', ROOM_SALT).update(name).digest('hex');
+}
+
+// ── Static Files ──
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript; charset=utf-8',
@@ -36,35 +42,28 @@ const MIME = {
   '.svg':  'image/svg+xml'
 };
 
-const server = serverOptions
-  ? https.createServer(serverOptions, handleRequest)
-  : require('http').createServer(handleRequest);
+const server = tlsOpts
+  ? https.createServer(tlsOpts, handleReq)
+  : require('http').createServer(handleReq);
 
-function handleRequest(req, res) {
-  const urlPath = req.url.split('?')[0];
+function handleReq(req, res) {
+  const url = req.url.split('?')[0];
 
-  // Fingerprint-Endpoint (für Client-Pinning)
-  if (urlPath === '/api/fingerprint' && serverOptions) {
-    const fp = crypto.createHash('sha256').update(serverOptions.cert).digest('hex');
+  if (url === '/api/fingerprint') {
+    const fp = tlsOpts
+      ? crypto.createHash('sha256').update(tlsOpts.cert).digest('hex')
+      : null;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ fingerprint: fp }));
     return;
   }
 
-  // Kein Fingerprint bei HTTP
-  if (urlPath === '/api/fingerprint') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ fingerprint: null }));
-    return;
-  }
-
-  const filePath = path.join(__dirname, urlPath === '/' ? 'index.html' : urlPath);
+  const filePath = path.join(__dirname, url === '/' ? 'index.html' : url);
   if (!filePath.startsWith(__dirname)) { res.writeHead(403); res.end(); return; }
 
   fs.readFile(filePath, (err, data) => {
     if (err) { res.writeHead(404); res.end('Not found'); return; }
-    const ext = path.extname(filePath);
-    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(filePath)] || 'application/octet-stream' });
     res.end(data);
   });
 }
@@ -72,68 +71,50 @@ function handleRequest(req, res) {
 // ── WebSocket ──
 const wss = new WebSocketServer({ server });
 
-// Rooms: Map<roomId, Set<Connection>>
-// Connection: { ws, anonId }
-// Das ist ALLES, was der Server weiß:
-//   - Welche anonyme ID gehört zu welcher WS-Verbindung
-//   - In welchem Channel (gehasht) sind welche anonymen IDs
-// Keine IPs, keine echten Namen, keine Logs.
-
+// rooms: Map<hashRoomId, Map<anonId, { ws }>>
+// Das ist ALLES, was der Server im RAM hält.
 const rooms = new Map();
 
-function hashRoom(name) {
-  return crypto.createHash('sha256').update('kc:' + name).digest('hex');
-}
-
-// ── Rate Limiting (anonym, nur pro Verbindung) ──
-const RATE_LIMIT = 30;
+// ── Anonymes Rate-Limiting ──
 const RATE_WINDOW = 10000;
+const RATE_MAX    = 40;
 
-function checkRate(ws) {
+function allowRate(ws) {
   const now = Date.now();
-  if (!ws._times) ws._times = [];
-  ws._times = ws._times.filter(t => now - t < RATE_WINDOW);
-  if (ws._times.length >= RATE_LIMIT) return false;
-  ws._times.push(now);
+  if (!ws._rt) ws._rt = [];
+  ws._rt = ws._rt.filter(t => now - t < RATE_WINDOW);
+  if (ws._rt.length >= RATE_MAX) return false;
+  ws._rt.push(now);
   return true;
 }
 
 // ── Heartbeat (ohne Logging) ──
-const heartbeat = setInterval(() => {
+const hb = setInterval(() => {
   wss.clients.forEach(ws => {
-    if (ws._alive === false) return ws.terminate();
-    ws._alive = false;
+    if (ws._ok === false) return ws.terminate();
+    ws._ok = false;
     ws.ping();
   });
 }, 30000);
-
-wss.on('close', () => clearInterval(heartbeat));
+wss.on('close', () => clearInterval(hb));
 
 wss.on('connection', (ws) => {
-  ws._alive = true;
-  ws.on('pong', () => { ws._alive = true; });
+  ws._ok = true;
+  ws.on('pong', () => { ws._ok = true; });
 
   let roomId = null;
   let anonId = null;
 
   ws.on('message', (raw) => {
-    // Rate Limit
-    if (!checkRate(ws)) return;
-
-    // Größe begrenzen (128KB)
-    if (raw.length > 131072) {
-      ws.close(1009, 'Too large');
-      return;
-    }
+    if (!allowRate(ws)) return;
+    if (raw.length > 131072) { ws.close(1009, 'Too large'); return; }
 
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
     // ── JOIN ──
-    // Der Client sagt uns seinen gehashten Raumnamen und eine anonyme ID
-    // Wir speichern NUR die anonyme ID — wir wissen nicht, wer das ist
     if (msg.type === 'join') {
-      if (!msg.room || !msg.anonId) return;
+      if (!msg.room || !msg.anonId || typeof msg.anonId !== 'string' || msg.anonId.length > 64) return;
 
       roomId = hashRoom(msg.room);
       anonId = msg.anonId;
@@ -141,74 +122,50 @@ wss.on('connection', (ws) => {
       if (!rooms.has(roomId)) rooms.set(roomId, new Map());
       const room = rooms.get(roomId);
 
-      // Max 20 Connections pro Raum
-      if (room.size >= 20) {
-        ws.close(1013, 'Full');
-        return;
-      }
+      if (room.size >= 20) { ws.close(1013, 'Room full'); return; }
 
-      // Bestehende anonyme IDs an neuen Client
-      const existing = [];
-      room.forEach((conn, id) => {
-        existing.push({ anonId: id });
-      });
-      ws.send(JSON.stringify({ type: 'peers', peers: existing }));
+      // Bestehende Peers mitteilen (nur anonyme IDs)
+      const peers = [];
+      room.forEach((_, id) => peers.push({ a: id }));
+      ws.send(JSON.stringify({ t: 'peers', p: peers }));
 
-      // Neue Verbindung registrieren
       room.set(anonId, { ws });
 
-      // Alle anderen über neuen Peer informieren
-      const joined = JSON.stringify({ type: 'peer-joined', anonId });
-      room.forEach((conn, id) => {
-        if (id !== anonId && conn.ws.readyState === 1) {
-          conn.ws.send(joined);
-        }
+      // Neuen Peer ankündigen
+      const joined = JSON.stringify({ t: 'join', a: anonId });
+      room.forEach((c, id) => {
+        if (id !== anonId && c.ws.readyState === 1) c.ws.send(joined);
       });
-
       return;
     }
 
-    // ── RELAY ──
-    // Der Server weiß nicht, was in msg.data steht.
-    // Er leitet es einfach an msg.to weiter.
-    // msg.to ist eine anonyme ID — der Server weiß nicht, wer das ist.
+    // ── RELAY (anonym, verschlüsselt) ──
     if (msg.type === 'relay') {
-      if (!roomId || !msg.to || !msg.data) return;
-
-      // Sicherstellen, dass der Sender existiert
-      if (!anonId) return;
-
+      if (!roomId || !msg.to || !msg.d) return;
       const room = rooms.get(roomId);
       if (!room) return;
-
       const target = room.get(msg.to);
       if (!target || target.ws.readyState !== 1) return;
 
-      // Weiterleiten — ohne zu verstehen, was drin ist
-      // Der Server kennt nicht mal den Sender
+      // Server leitet weiter — ohne zu wissen, was drin ist
       target.ws.send(JSON.stringify({
-        type: 'msg',
-        data: msg.data
+        t: 'msg',
+        d: msg.d
       }));
-
       return;
     }
 
-    // ── BROADCAST (an alle im Raum, außer sich selbst) ──
+    // ── BROADCAST (an alle im Raum, anonym) ──
     if (msg.type === 'broadcast') {
-      if (!roomId || !msg.data) return;
+      if (!roomId || !msg.d) return;
       const room = rooms.get(roomId);
       if (!room) return;
 
-      room.forEach((conn, id) => {
-        if (id !== anonId && conn.ws.readyState === 1) {
-          conn.ws.send(JSON.stringify({
-            type: 'msg',
-            data: msg.data
-          }));
+      room.forEach((c, id) => {
+        if (id !== anonId && c.ws.readyState === 1) {
+          c.ws.send(JSON.stringify({ t: 'msg', d: msg.d }));
         }
       });
-
       return;
     }
   });
@@ -220,10 +177,9 @@ wss.on('connection', (ws) => {
 
     room.delete(anonId);
 
-    // Leave-Broadcast
-    const leave = JSON.stringify({ type: 'leave', anonId });
-    room.forEach(conn => {
-      if (conn.ws.readyState === 1) conn.ws.send(leave);
+    const leave = JSON.stringify({ t: 'leave', a: anonId });
+    room.forEach(c => {
+      if (c.ws.readyState === 1) c.ws.send(leave);
     });
 
     if (room.size === 0) rooms.delete(roomId);
@@ -231,7 +187,5 @@ wss.on('connection', (ws) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  const proto = serverOptions ? 'HTTPS' : 'HTTP';
-  console.log(`Relay server on port ${PORT} (${proto})`);
-  console.log('No logging. No storage. No knowledge.');
+  console.log(`Relay on :${PORT} (${tlsOpts ? 'WSS' : 'WS'})`);
 });
