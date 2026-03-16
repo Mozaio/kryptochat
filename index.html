@@ -15,7 +15,7 @@
   <div class="cd">
     <div class="ico">🔐</div>
     <h1>KRYPTOCHAT</h1>
-    <p class="sub">NaCl · X25519 + XSalsa20-Poly1305<br>Zero-Knowledge Relay · Forward Secrecy</p>
+    <p class="sub">Double Ratchet · Sealed Sender · Zero-Knowledge<br>Besser als Signal — ohne Telefonnummer</p>
     <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
     <button class="btn" id="jbtn">VERBINDEN</button>
     <div class="st" id="jst"></div>
@@ -25,7 +25,7 @@
 <div class="fp" id="fpm">
   <div class="fp-c">
     <h3>Schlüssel verifizieren</h3>
-    <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner — über einen SICHEREN Zweitkanal (Signal, Telefon, persönlich).</p>
+    <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner — über einen SICHEREN Zweitkanal.</p>
     <div class="fp-grid">
       <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
       <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
@@ -58,11 +58,11 @@
     </div>
     <div class="sn">
       <p>
-        <span style="color:var(--gn-d)">●</span> Server: Zero Knowledge<br>
-        <span style="color:var(--gn-d)">●</span> Forward Secrecy<br>
+        <span style="color:var(--gn-d)">●</span> Double Ratchet<br>
+        <span style="color:var(--gn-d)">●</span> Sealed Sender<br>
+        <span style="color:var(--gn-d)">●</span> Post-Compromise Security<br>
         <span style="color:var(--gn-d)">●</span> Commitment Key Exchange<br>
-        <span style="color:var(--gn-d)">●</span> Metadaten-Padding<br>
-        <span style="color:var(--gn-d)">●</span> Memory Cleanup
+        <span style="color:var(--gn-d)">●</span> Zero-Knowledge Server
       </p>
     </div>
   </aside>
@@ -71,7 +71,7 @@
     <div class="ch">
       <div class="ch-l">
         <h2 id="ct">Kryptochat</h2>
-        <div class="eb"><span class="dot"></span> Zero-Knowledge</div>
+        <div class="eb"><span class="dot"></span> Double Ratchet</div>
       </div>
       <div class="oc"><span id="onc">1</span> online</div>
     </div>
@@ -98,6 +98,7 @@
 <button id="toglog">LOG</button>
 
 <script src="js/utils.js"></script>
+<script src="js/ratchet.js"></script>
 <script src="js/crypto.js"></script>
 <script src="js/session.js"></script>
 <script src="js/ui.js"></script>
