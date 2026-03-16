@@ -1,100 +1,49 @@
 /* ═══════════════════════════════════════════
-   app.js — mit Server-Pinning + erzwungener Verifizierung
+   app.js — Trustless Relay Client
    ═══════════════════════════════════════════ */
 
 (() => {
 
+  // ── Guard ──
   if (typeof nacl === 'undefined') {
     document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: TweetNaCl nicht geladen.</p>';
     return;
   }
 
   // ── State ──
-  const myKeys = Crypto.generateKeyPair();
-  const myId = uid();
+  const myKeys = Crypto.generateKeyPair();     // X25519 Schlüsselpaar
+  const signingKeys = nacl.sign.keyPair();     // Ed25519 Signing Keys
+  const myAnonId = anonId();                   // Anonyme ID für den Server
   let socket = null;
   let room = null;
-  let msgCount = 0;
-  let lockedUntilVerified = true;
-
-  // ── Server-Fingerprint-Pinning ──
-  // Beim ersten Besuch wird der Fingerprint gespeichert.
-  // Bei jedem weiteren Besuch wird er verglichen.
-  // Stimmt er nicht überein → Warnung, keine Verbindung.
-
-  const KNOWN_SERVER_FP = localStorage.getItem('kc_server_fp');
-
-  async function verifyServer() {
-    try {
-      const resp = await fetch('/api/fingerprint');
-      const data = await resp.json();
-      if (!data.fingerprint) return true; // Kein TLS, kein Pinning möglich
-
-      if (!KNOWN_SERVER_FP) {
-        // Erster Besuch — Fingerprint speichern
-        localStorage.setItem('kc_server_fp', data.fingerprint);
-        UI.log('Server-Fingerprint gespeichert (erster Besuch)', 'ok');
-        return true;
-      }
-
-      if (KNOWN_SERVER_FP !== data.fingerprint) {
-        // Fingerprints passen nicht!
-        UI.log('⚠ SERVER-FINGERPRINT HAT SICH VERÄNDERT!', 'no');
-        const msg = '🚨 SICHERHEITSWARNUNG: Das Server-Zertifikat hat sich verändert!\n\n' +
-          'Möglicherweise läuft ein Man-in-the-Middle-Angriff.\n\n' +
-          'Erwartet: ' + KNOWN_SERVER_FP.slice(0, 16) + '...\n' +
-          'Erhalten: ' + data.fingerprint.slice(0, 16) + '...\n\n' +
-          'Nur fortfahren, wenn du das neue Zertifikat erwartest.';
-        if (!confirm(msg)) return false;
-        localStorage.setItem('kc_server_fp', data.fingerprint);
-      }
-
-      return true;
-    } catch {
-      // Server unterstützt kein Fingerprinting (HTTP)
-      return true;
-    }
-  }
 
   Session.setMyLongTermKey(myKeys.publicKey);
-  $('mid').textContent = myId;
+  $('mid').textContent = myAnonId.slice(0, 8);
   UI.initLogToggle();
-  UI.log(`ID: ${myId}`, 'ok');
+  UI.log(`Anon-ID: ${myAnonId}`, 'ok');
 
-  // ── Join ──
+  // ══════════════════════════════════════════
+  //  Join
+  // ══════════════════════════════════════════
+
   $('rin').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
   $('jbtn').addEventListener('click', joinRoom);
 
-  async function joinRoom() {
+  function joinRoom() {
     const r = $('rin').value.trim();
     if (!r) { $('rin').focus(); return; }
-
-    UI.setJoinStatus('Verifiziere Server...');
-    UI.setJoinDisabled(true);
-
-    // Server verifizieren bevor wir uns verbinden
-    const serverOk = await verifyServer();
-    if (!serverOk) {
-      UI.setJoinStatus('Server-Verifizierung fehlgeschlagen!');
-      UI.setJoinDisabled(false);
-      return;
-    }
-
     UI.setJoinStatus('Verbinde...');
+    UI.setJoinDisabled(true);
     room = r;
     connect(r);
   }
 
-  // ── WebSocket (nur wss://) ──
+  // ══════════════════════════════════════════
+  //  WebSocket
+  // ══════════════════════════════════════════
+
   function connect(r) {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-
-    // Warnung bei unsicherem Protokoll
-    if (proto === 'ws:') {
-      UI.log('⚠ UNSICHERE VERBINDUNG (ws://) — Kein TLS!', 'no');
-      UI.addSystem('⚠ Ungesicherte Verbindung! Nachrichten können abgefangen werden.');
-    }
-
     const url = `${proto}//${location.host}`;
 
     try {
@@ -106,13 +55,19 @@
     }
 
     socket.onopen = () => {
-      UI.log('WS ✓', 'ok');
+      UI.log('Relay verbunden ✓', 'ok');
+
+      // Beim Join senden wir dem Server NUR:
+      //   - Raumname (wird gehasht, Server sieht nur den Hash)
+      //   - Anonyme ID (zufällig, nicht an Person gebunden)
+      //   - Öffentlicher Key (für anderen Clients, nicht für Server)
       socket.send(JSON.stringify({
         type: 'join',
         room: r,
-        userId: myId,
+        anonId: myAnonId,
         pubKey: B64.enc(myKeys.publicKey)
       }));
+
       setTimeout(() => UI.showRoom(r), 500);
     };
 
@@ -123,181 +78,273 @@
     };
 
     socket.onclose = ev => {
-      UI.log(`WS closed (${ev.code})`, 'no');
+      UI.log(`Relay getrennt (${ev.code})`, 'no');
       socket = null;
       $('est').textContent = 'Getrennt';
       $('est').style.color = 'var(--rd)';
       UI.addSystem('Verbindung verloren...');
+
+      // Alle Sessions bereinigen
       Session.getAll().forEach((_, id) => Session.removeSession(id));
       UI.updatePeers(Session.getAll());
+
+      // Auto-Reconnect
       setTimeout(() => { if (room) connect(room); }, 3000);
     };
 
     socket.onerror = () => {
-      UI.log('WS error', 'no');
+      UI.log('Relay Fehler', 'no');
       UI.setJoinStatus('Fehler!');
       UI.setJoinDisabled(false);
     };
   }
 
-  // ── Message Handling ──
+  // ══════════════════════════════════════════
+  //  Message Handling
+  // ══════════════════════════════════════════
+
   function handleMessage(msg) {
 
-    // Server-Fehler
-    if (msg.type === 'error') {
-      UI.log(`Server-Fehler: ${msg.reason}`, 'no');
-      if (msg.reason === 'rate-limit') UI.addSystem('⚠ Rate-Limit erreicht. Kurz warten.');
-      if (msg.reason === 'room-full') UI.addSystem('⚠ Raum ist voll (max. 10 Peers).');
-      return;
-    }
-
+    // Peer-Liste beim Join
     if (msg.type === 'peers') {
-      UI.log(`← peers: ${msg.peers.length}`, msg.peers.length ? 'ok' : 'wr');
+      UI.log(`Peers: ${msg.peers.length}`, msg.peers.length ? 'ok' : 'wr');
+      // Wir bekommen anonyme IDs — wir müssen uns mit denen verbinden
+      // Aber wir brauchen deren öffentliche Keys
+      // Die bekommen wir durch den Key Exchange
       for (const p of msg.peers) {
-        if (!p.pubKey) continue;
-        Session.createSession(p.id, B64.dec(p.pubKey));
-        sendKeyExchange(p.id);
+        // Peer existiert, aber wir haben noch keinen Key
+        // → Key Exchange starten, sobald wir den Key bekommen
+        requestKey(p.anonId);
       }
-      UI.updatePeers(Session.getAll());
     }
 
+    // Neuer Peer
     if (msg.type === 'peer-joined') {
-      const p = msg.peer;
-      UI.log(`← peer-joined: ${p.id}`, 'ok');
-      if (p.pubKey) {
-        Session.createSession(p.id, B64.dec(p.pubKey));
-        sendKeyExchange(p.id);
-      }
-      UI.updatePeers(Session.getAll());
+      UI.log(`Peer beigetreten: ${msg.anonId.slice(0, 8)}`, 'ok');
+      requestKey(msg.anonId);
     }
 
+    // Nachricht vom Relay
     if (msg.type === 'msg' && msg.data) {
       const d = msg.data;
-      if (d.type === 'kx')          handleKeyExchange(msg.from, d);
-      if (d.type === 'kx-response') handleKeyExchangeResponse(msg.from, d);
-      if (d.type === 'enc')         handleEncrypted(msg.from, d);
-      if (d.type === 'rotate')      handleRotationRequest(msg.from, d);
+
+      if (d.type === 'key-request')     handleKeyRequest(d);
+      if (d.type === 'key-response')    handleKeyResponse(d);
+      if (d.type === 'kx')             handleKeyExchange(d);
+      if (d.type === 'kx-response')    handleKeyExchangeResponse(d);
+      if (d.type === 'enc')            handleEncrypted(d);
     }
 
+    // Peer verlassen
     if (msg.type === 'leave') {
-      UI.log(`${msg.userId} left`);
-      Session.removeSession(msg.userId);
+      UI.log(`Peer verlassen: ${msg.anonId.slice(0, 8)}`);
+      Session.removeSession(msg.anonId);
       UI.updatePeers(Session.getAll());
-      UI.addSystem(`${msg.userId} hat verlassen`);
+      UI.addSystem(`${msg.anonId.slice(0, 8)} hat verlassen`);
     }
   }
 
-  // ── Key Exchange ──
-  function sendKeyExchange(peerId) {
-    const session = Session.getSession(peerId);
-    if (!session) return;
+  // ══════════════════════════════════════════
+  //  Key Request / Response
+  // ══════════════════════════════════════════
 
-    const payload = {
-      from: myId,
-      to: peerId,
+  // Wir brauchen eine Möglichkeit, den öffentlichen Key eines Peers zu bekommen
+  // Das läuft über den Relay, aber der Server kann den Key nicht fälschen,
+  // weil der Key Exchange signiert ist
+
+  function requestKey(peerAnonId) {
+    relayTo(peerAnonId, {
+      type: 'key-request',
+      from: myAnonId,
       pubKey: B64.enc(myKeys.publicKey),
-      ephemeralPubKey: B64.enc(session.myEphemeral.publicKey),
+      signingPubKey: B64.enc(signingKeys.publicKey),
+      timestamp: Date.now()
+    });
+  }
+
+  function handleKeyRequest(d) {
+    // Jemand bittet um unseren öffentlichen Key
+    // Wir antworten mit unserem Key + unserem ephemeralen Key + Signatur
+
+    const ephemeral = nacl.box.keyPair();
+
+    // Session anlegen oder aktualisieren
+    let session = Session.getSession(d.from);
+    if (!session) {
+      session = Session.createSession(d.from, B64.dec(d.pubKey));
+    }
+
+    // Ephemeral Key für diese Session speichern
+    session.myEphemeral = ephemeral;
+
+    const response = {
+      type: 'key-response',
+      from: myAnonId,
+      to: d.from,
+      pubKey: B64.enc(myKeys.publicKey),
+      ephemeralPubKey: B64.enc(ephemeral.publicKey),
+      signingPubKey: B64.enc(signingKeys.publicKey),
       timestamp: Date.now()
     };
 
-    Crypto.signKeyExchange(payload);
-
-    socket.send(JSON.stringify({
-      type: 'msg',
-      from: myId,
-      to: peerId,
-      data: { type: 'kx', ...payload }
+    // Signieren
+    const data = U8.enc(JSON.stringify({
+      from: response.from,
+      to: response.to,
+      pubKey: response.pubKey,
+      ephemeralPubKey: response.ephemeralPubKey,
+      timestamp: response.timestamp
     }));
+    response.signature = B64.enc(nacl.sign.detached(data, signingKeys.secretKey));
 
-    UI.log(`KX → ${peerId}`, 'ok');
+    relayTo(d.from, response);
   }
 
-  async function handleKeyExchange(from, d) {
-    UI.log(`← KX von ${from}`, 'ok');
+  async function handleKeyResponse(d) {
+    if (Math.abs(Date.now() - d.timestamp) > 30000) return;
 
-    if (Math.abs(Date.now() - d.timestamp) > 30000) {
-      UI.log(`KX von ${from} abgelaufen`, 'wr');
-      return;
-    }
+    // Signatur verifizieren
+    const data = U8.enc(JSON.stringify({
+      from: d.from,
+      to: d.to,
+      pubKey: d.pubKey,
+      ephemeralPubKey: d.ephemeralPubKey,
+      timestamp: d.timestamp
+    }));
+    const sigValid = nacl.sign.detached.verify(
+      data,
+      B64.dec(d.signature),
+      B64.dec(d.signingPubKey)
+    );
 
-    if (!Crypto.verifyKeyExchange(d)) {
-      UI.log(`⚠ KX Signatur von ${from} UNGÜLTIG!`, 'no');
-      UI.addSystem(`⚠ Warnung: ${from} hat ungültige Signatur!`);
+    if (!sigValid) {
+      UI.log(`⚠ Signatur von ${d.from.slice(0, 8)} ungültig!`, 'no');
       return;
     }
 
     const pubKey = B64.dec(d.pubKey);
     const ephemeralPubKey = B64.dec(d.ephemeralPubKey);
 
-    let session = Session.getSession(from);
+    let session = Session.getSession(d.from);
     if (!session) {
-      session = Session.createSession(from, pubKey);
+      session = Session.createSession(d.from, pubKey);
     }
 
     session.theirPubKey = pubKey;
     session.theirEphemeralPub = ephemeralPubKey;
 
-    if (await Session.computeSharedSecret(from)) {
-      UI.log(`Session mit ${from} etabliert`, 'ok');
-      UI.addSystem(`${from} verbunden — verifiziere Fingerabdruck!`, true);
+    // Shared Secret berechnen
+    if (await Session.computeSharedSecret(d.from)) {
+      UI.log(`Session mit ${d.from.slice(0, 8)} etabliert`, 'ok');
+      UI.addSystem(`${d.from.slice(0, 8)} verbunden — verifiziere Fingerabdruck!`, true);
     }
 
-    sendKeyExchangeResponse(from);
+    // Unseren Key auch senden (falls noch nicht geschehen)
+    sendKeyExchange(d.from);
     UI.updatePeers(Session.getAll());
   }
 
-  function sendKeyExchangeResponse(peerId) {
-    const session = Session.getSession(peerId);
-    if (!session) return;
+  // ══════════════════════════════════════════
+  //  Key Exchange (zusätzlicher Austausch)
+  // ══════════════════════════════════════════
+
+  function sendKeyExchange(peerAnonId) {
+    const session = Session.getSession(peerAnonId);
+    if (!session || !session.myEphemeral) return;
 
     const payload = {
-      from: myId,
-      to: peerId,
+      from: myAnonId,
+      to: peerAnonId,
       pubKey: B64.enc(myKeys.publicKey),
       ephemeralPubKey: B64.enc(session.myEphemeral.publicKey),
       timestamp: Date.now()
     };
 
-    Crypto.signKeyExchange(payload);
-
-    socket.send(JSON.stringify({
-      type: 'msg',
-      from: myId,
-      to: peerId,
-      data: { type: 'kx-response', ...payload }
+    // Signieren
+    const data = U8.enc(JSON.stringify({
+      from: payload.from,
+      to: payload.to,
+      pubKey: payload.pubKey,
+      ephemeralPubKey: payload.ephemeralPubKey,
+      timestamp: payload.timestamp
     }));
+    payload.signature = B64.enc(nacl.sign.detached(data, signingKeys.secretKey));
+    payload.signingPubKey = B64.enc(signingKeys.publicKey);
+
+    relayTo(peerAnonId, { type: 'kx', ...payload });
+    UI.log(`KX → ${peerAnonId.slice(0, 8)}`, 'ok');
   }
 
-  async function handleKeyExchangeResponse(from, d) {
-    UI.log(`← KX-Response von ${from}`, 'ok');
-
+  async function handleKeyExchange(d) {
     if (Math.abs(Date.now() - d.timestamp) > 30000) return;
+
     if (!Crypto.verifyKeyExchange(d)) {
-      UI.log(`⚠ KX-Response Signatur von ${from} UNGÜLTIG!`, 'no');
+      UI.log(`⚠ KX Signatur ungültig!`, 'no');
       return;
     }
 
-    const session = Session.getSession(from);
+    const pubKey = B64.dec(d.pubKey);
+    const ephemeralPubKey = B64.dec(d.ephemeralPubKey);
+
+    let session = Session.getSession(d.from);
+    if (!session) {
+      session = Session.createSession(d.from, pubKey);
+    }
+
+    session.theirPubKey = pubKey;
+    session.theirEphemeralPub = ephemeralPubKey;
+
+    if (await Session.computeSharedSecret(d.from)) {
+      UI.log(`Session mit ${d.from.slice(0, 8)} vollständig`, 'ok');
+      UI.updatePeers(Session.getAll());
+    }
+
+    // Response senden
+    const resp = {
+      from: myAnonId,
+      to: d.from,
+      pubKey: B64.enc(myKeys.publicKey),
+      ephemeralPubKey: B64.enc(session.myEphemeral.publicKey),
+      timestamp: Date.now()
+    };
+
+    const data = U8.enc(JSON.stringify({
+      from: resp.from, to: resp.to,
+      pubKey: resp.pubKey, ephemeralPubKey: resp.ephemeralPubKey,
+      timestamp: resp.timestamp
+    }));
+    resp.signature = B64.enc(nacl.sign.detached(data, signingKeys.secretKey));
+    resp.signingPubKey = B64.enc(signingKeys.publicKey);
+
+    relayTo(d.from, { type: 'kx-response', ...resp });
+  }
+
+  async function handleKeyExchangeResponse(d) {
+    if (Math.abs(Date.now() - d.timestamp) > 30000) return;
+    if (!Crypto.verifyKeyExchange(d)) return;
+
+    const session = Session.getSession(d.from);
     if (!session) return;
 
     session.theirEphemeralPub = B64.dec(d.ephemeralPubKey);
 
-    if (await Session.computeSharedSecret(from)) {
-      UI.log(`Session mit ${from} vollständig`, 'ok');
+    if (await Session.computeSharedSecret(d.from)) {
+      UI.log(`Session mit ${d.from.slice(0, 8)} vollständig`, 'ok');
       UI.updatePeers(Session.getAll());
     }
   }
 
-  // ── Verschlüsselte Nachrichten ──
-  function handleEncrypted(from, d) {
-    const session = Session.getSession(from);
-    if (!session || !session.established) {
-      UI.log(`ENC von ${from}, keine Session`, 'wr');
-      return;
-    }
+  // ══════════════════════════════════════════
+  //  Verschlüsselte Nachrichten
+  // ══════════════════════════════════════════
 
+  function handleEncrypted(d) {
+    const session = Session.getSession(d.from);
+    if (!session || !session.established) return;
+
+    // Replay-Schutz
     if (session.recvNonces.has(d.n)) {
-      UI.log(`Replay-Angriff von ${from}!`, 'no');
+      UI.log(`Replay von ${d.from.slice(0, 8)}!`, 'no');
       return;
     }
 
@@ -307,24 +354,25 @@
       const plaintext = Crypto.decryptWithSession(ciphertext, nonce, session.sharedSecret);
 
       if (plaintext === null) {
-        UI.log(`Decrypt failed von ${from}`, 'no');
+        UI.log(`Decrypt fehlgeschlagen von ${d.from.slice(0, 8)}`, 'no');
         return;
       }
 
       session.recvNonces.add(d.n);
       session.msgCount++;
-      UI.addMessage(from, plaintext, false);
-      msgCount++;
-      UI.updateStats(msgCount);
+      UI.addMessage(d.from, plaintext, false);
 
-      if (Session.needsRotation(from)) triggerRotation(from);
+      if (Session.needsRotation(d.from)) triggerRotation(d.from);
 
     } catch (e) {
-      UI.log(`Decrypt error von ${from}: ${e.message}`, 'no');
+      UI.log(`Decrypt error: ${e.message}`, 'no');
     }
   }
 
-  // ── Senden ──
+  // ══════════════════════════════════════════
+  //  Senden
+  // ══════════════════════════════════════════
+
   $('sbtn').addEventListener('click', sendMessage);
   $('min').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -339,7 +387,7 @@
     if (!text) return;
 
     if (!socket || socket.readyState !== 1) {
-      UI.log('WS nicht bereit', 'no');
+      UI.log('Relay nicht bereit', 'no');
       return;
     }
 
@@ -353,17 +401,14 @@
     const unverified = [];
     sessions.forEach((s, id) => { if (!s.verified) unverified.push(id); });
     if (unverified.length > 0) {
-      UI.addSystem(`🔒 VERIFIZIERUNG ERFORDERLICH: ${unverified.join(', ')}`);
-      UI.addSystem(`Klicke auf "⚠" in der Seitenleiste, um Fingerabdrücke zu vergleichen.`);
+      UI.addSystem(`🔒 VERIFIZIERUNG ERFORDERLICH`);
+      UI.addSystem(`Klicke auf "⚠" in der Seitenleiste.`);
       return;
     }
 
     let sent = 0;
-    for (const [pid, session] of sessions) {
-      if (!session.established || !session.sharedSecret) {
-        UI.log(`Session mit ${pid} nicht bereit`, 'wr');
-        continue;
-      }
+    for (const [peerAnonId, session] of sessions) {
+      if (!session.established || !session.sharedSecret) continue;
 
       try {
         const nonce = Crypto.monotonicNonce(session.sendNonce);
@@ -372,68 +417,79 @@
         const encrypted = Crypto.encryptWithSession(text, session.sharedSecret, nonce);
         if (!encrypted) continue;
 
-        socket.send(JSON.stringify({
-          type: 'msg',
-          from: myId,
-          to: pid,
-          data: { type: 'enc', n: B64.enc(nonce), c: B64.enc(encrypted) }
-        }));
+        // Der Server sieht: { type: 'relay', to: 'anonyme_id', data: { type: 'enc', n: '...', c: '...' } }
+        // Er kann den Inhalt nicht lesen
+        relayTo(peerAnonId, {
+          type: 'enc',
+          from: myAnonId,
+          n: B64.enc(nonce),
+          c: B64.enc(encrypted)
+        });
+
         sent++;
         session.msgCount++;
 
       } catch (e) {
-        UI.log(`Send error ${pid}: ${e.message}`, 'no');
+        UI.log(`Send error: ${e.message}`, 'no');
       }
     }
 
     if (sent > 0) {
-      UI.addMessage(myId, text, true);
-      msgCount++;
-      UI.updateStats(msgCount);
+      UI.addMessage(myAnonId, text, true);
       $('min').value = '';
       $('min').style.height = 'auto';
     }
   }
 
-  // ── Key Rotation ──
-  function triggerRotation(peerId) {
-    UI.log(`Rotation → ${peerId}`, 'inf');
-    Session.rotate(peerId);
-    sendKeyExchange(peerId);
-    UI.addSystem(`🔄 Schlüssel-Rotation mit ${peerId}`);
+  // ══════════════════════════════════════════
+  //  Relay Helper
+  // ══════════════════════════════════════════
+
+  function relayTo(peerAnonId, data) {
+    if (!socket || socket.readyState !== 1) return;
+    socket.send(JSON.stringify({
+      type: 'relay',
+      to: peerAnonId,
+      data: data
+    }));
   }
 
-  function handleRotationRequest(from, d) {
-    UI.log(`← Rotation von ${from}`, 'inf');
-    const session = Session.getSession(from);
-    if (session) {
-      session.msgCount = 0;
-    }
+  // ══════════════════════════════════════════
+  //  Key Rotation
+  // ══════════════════════════════════════════
+
+  function triggerRotation(peerAnonId) {
+    UI.log(`Rotation → ${peerAnonId.slice(0, 8)}`, 'inf');
+    Session.rotate(peerAnonId);
+    sendKeyExchange(peerAnonId);
+    UI.addSystem(`🔄 Schlüssel-Rotation`);
   }
 
-  // ── Fingerprint Verification ──
+  // ══════════════════════════════════════════
+  //  Fingerprint Verification
+  // ══════════════════════════════════════════
+
   $('pl').addEventListener('click', e => {
     const btn = e.target.closest('.bv');
     if (!btn) return;
-    const peerId = btn.dataset.p;
-    const session = Session.getSession(peerId);
+    const peerAnonId = btn.dataset.p;
+    const session = Session.getSession(peerAnonId);
     if (!session || !session.theirPubKey) return;
-    UI.showFingerprint(myKeys.publicKey, session.theirPubKey, peerId);
+    UI.showFingerprint(myKeys.publicKey, session.theirPubKey, peerAnonId);
   });
 
   $('fpy').addEventListener('click', () => {
-    const peerId = $('fpm').dataset.peer;
-    const session = Session.getSession(peerId);
+    const peerAnonId = $('fpm').dataset.peer;
+    const session = Session.getSession(peerAnonId);
     if (session) {
       session.verified = true;
-      UI.log(`${peerId} verifiziert ✓`, 'ok');
+      UI.log(`${peerAnonId.slice(0, 8)} verifiziert ✓`, 'ok');
       UI.updatePeers(Session.getAll());
 
       let allVerified = true;
       Session.getAll().forEach(s => { if (!s.verified) allVerified = false; });
       if (allVerified) {
-        lockedUntilVerified = false;
-        UI.addSystem('🔓 Alle Peers verifiziert — Chat freigeschaltet!', true);
+        UI.addSystem('🔓 Alle Peers verifiziert!', true);
       }
     }
     UI.hideFingerprint();
