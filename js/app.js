@@ -1,15 +1,5 @@
 /* ═══════════════════════════════════════════════════
-   app.js — Kryptochat mit Double Ratchet + Sealed Sender
-   
-   Was besser ist als Signal:
-   1. Double Ratchet (wie Signal, gleicher Algorithmus)
-   2. Sealed Sender (wie Signal, gleicher Ansatz)
-   3. Commitment-basierter Key Exchange (hat Signal NICHT)
-   4. Obligatorische Fingerprint-Verifikation (Signal: optional)
-   5. Keine Telefonnummer (Signal: braucht eine)
-   6. Zero-Knowledge Server (Signal: kennt Metadaten)
-   7. Anonyme IDs (Signal: kennt deine Identität)
-   8. Forward Secrecy von der ERSTEN Nachricht an
+   app.js — Hauptlogik (korrigiert)
    ═══════════════════════════════════════════════════ */
 
 (() => {
@@ -19,7 +9,7 @@
     return;
   }
   if (typeof DoubleRatchet === 'undefined') {
-    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: DoubleRatchet nicht geladen.</p>';
+    document.body.innerHTML = '<p style="color:red;padding:2rem">Fehler: Ratchet nicht geladen.</p>';
     return;
   }
 
@@ -184,7 +174,6 @@
     });
 
     UI.log(`Commit → ${peerAnonId.slice(0, 8)}`, 'ok');
-
     if (session.theirCommitment) sendKey(peerAnonId);
   }
 
@@ -232,7 +221,7 @@
     if (!session) return;
 
     if (Math.abs(Date.now() - d.timestamp) > 30000) {
-      UI.log(`Key abgelaufen von ${peerAnonId.slice(0, 8)}`, 'wr');
+      UI.log(`Key abgelaufen`, 'wr');
       return;
     }
 
@@ -243,7 +232,7 @@
       timestamp: d.timestamp
     };
     if (!Crypto.verify(sigData, B64.dec(d.signature), B64.dec(d.signingPubKey))) {
-      UI.log(`⚠ Signatur UNGÜLTIG von ${peerAnonId.slice(0, 8)}!`, 'no');
+      UI.log(`⚠ Signatur UNGÜLTIG!`, 'no');
       UI.addSystem(`⚠ Warnung: ${peerAnonId.slice(0, 8)} hat ungültige Signatur!`);
       return;
     }
@@ -261,14 +250,13 @@
         UI.addSystem(`🚨 Manipulationsversuch erkannt!`);
         return;
       }
-      UI.log(`Commitment ✓ ${peerAnonId.slice(0, 8)}`, 'ok');
+      UI.log(`Commitment ✓`, 'ok');
     }
 
-    // Keys speichern
     session.theirPubKey = B64.dec(d.pubKey);
     session.theirEphemeralPub = B64.dec(d.ephemeralPubKey);
 
-    // Shared Secret berechnen → initialisiert automatisch Double Ratchet
+    // Shared Secret → initialisiert automatisch Double Ratchet
     if (await Session.computeSharedSecret(peerAnonId)) {
       UI.log(`Ratchet ✓ ${peerAnonId.slice(0, 8)}`, 'ok');
       UI.addSystem(`${peerAnonId.slice(0, 8)} verbunden — verifiziere Fingerabdruck!`, true);
@@ -279,21 +267,53 @@
   }
 
   // ══════════════════════════════════════════
-  //  VERSCHLÜSSELTE NACHRICHTEN (Double Ratchet)
+  //  VERSCHLÜSSELTE NACHRICHTEN
   // ══════════════════════════════════════════
 
   function handleEncrypted(d) {
-    const session = Session.getSession(d.from);
-    if (!session || !session.ratchet) return;
+    // Finde Session durch Sealed Sender ID
+    let targetSession = null;
+    let targetPeerId = null;
+
+    // Versuche Sealed Sender zu entschlüsseln
+    if (d.si && d.sn) {
+      for (const [peerId, session] of Session.getAll()) {
+        if (!session.sealedKey || !session.established) continue;
+
+        const senderId = Session.unsealSenderId(session.sealedKey, d.si, d.sn);
+        if (senderId === peerId) {
+          targetSession = session;
+          targetPeerId = peerId;
+          break;
+        }
+      }
+    }
+
+    // Fallback: Suche über dh-Header (erste Nachricht)
+    if (!targetSession) {
+      for (const [peerId, session] of Session.getAll()) {
+        if (!session.ratchet) continue;
+        targetSession = session;
+        targetPeerId = peerId;
+        break;
+      }
+    }
+
+    if (!targetSession || !targetPeerId) {
+      UI.log(`Enc: Kein Ziel gefunden`, 'wr');
+      return;
+    }
 
     try {
-      const plaintext = Session.decryptMessage(d.from, d.h, d.n, d.c);
+      const plaintext = Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
+
       if (plaintext === null) {
-        UI.log(`Ratchet Decrypt fehlgeschlagen`, 'no');
+        UI.log(`Decrypt fehlgeschlagen von ${targetPeerId.slice(0, 8)}`, 'no');
         return;
       }
 
-      UI.addMessage(d.from, plaintext, false);
+      UI.addMessage(targetPeerId, plaintext, false);
+
     } catch (e) {
       UI.log(`Decrypt Error: ${e.message}`, 'no');
     }
@@ -304,8 +324,8 @@
   // ══════════════════════════════════════════
 
   function handleHeartbeat(d) {
-    const session = Session.getSession(d.from);
-    if (session) Session.recordHeartbeat(d.from);
+    // Heartbeat durch Ratchet entschlüsseln
+    handleEncrypted(d);
   }
 
   setInterval(() => {
@@ -325,17 +345,20 @@
     const encrypted = Session.encryptMessage(peerId, 'hb:' + Date.now());
     if (!encrypted) return;
 
+    const sealed = Session.sealSenderId(session.sealedKey, myAnonId);
+
     relayTo(peerId, {
       type: 'heartbeat',
-      from: myAnonId,
       h: encrypted.header,
       n: encrypted.nonce,
-      c: encrypted.ciphertext
+      c: encrypted.ciphertext,
+      si: sealed.sealedId,
+      sn: sealed.sealedNonce
     });
   }
 
   // ══════════════════════════════════════════
-  //  SENDEN (mit Sealed Sender + Double Ratchet)
+  //  SENDEN
   // ══════════════════════════════════════════
 
   $('sbtn').addEventListener('click', sendMessage);
@@ -362,7 +385,7 @@
       return;
     }
 
-    // ═══ ERZWUNGENE VERIFIZIERUNG ═══
+    // Verifizierung erzwingen
     const unverified = [];
     sessions.forEach((s, id) => { if (!s.verified) unverified.push(id); });
     if (unverified.length > 0) {
@@ -372,16 +395,18 @@
 
     let sent = 0;
     for (const [peerId, session] of sessions) {
-      if (!session.ratchet || !session.sealedKey) continue;
+      if (!session.ratchet || !session.sealedKey) {
+        UI.log(`Session ${peerId.slice(0, 8)} nicht bereit`, 'wr');
+        continue;
+      }
 
       try {
-        // ── Double Ratchet: Nachricht verschlüsseln ──
         const encrypted = Session.encryptMessage(peerId, text);
-        if (!encrypted) continue;
+        if (!encrypted) {
+          UI.log(`Encrypt fehlgeschlagen für ${peerId.slice(0, 8)}`, 'no');
+          continue;
+        }
 
-        // ── Sealed Sender: Sender-ID verschlüsseln ──
-        // Der Server sieht NUR die anonyme Empfänger-ID.
-        // Die Sender-ID ist IN der verschlüsselten Nachricht.
         const sealed = Session.sealSenderId(session.sealedKey, myAnonId);
 
         await jitter(0, 100);
@@ -391,13 +416,15 @@
           h: encrypted.header,
           n: encrypted.nonce,
           c: encrypted.ciphertext,
-          si: sealed.sealedId,       // Verschlüsselte Sender-ID
-          sn: sealed.sealedNonce     // Nonce für Sealed Sender
+          si: sealed.sealedId,
+          sn: sealed.sealedNonce
         });
 
         sent++;
+        UI.log(`MSG → ${peerId.slice(0, 8)} (ratchet n=${encrypted.header.n})`, 'ok');
+
       } catch (e) {
-        // Still
+        UI.log(`Send Error: ${e.message}`, 'no');
       }
     }
 
@@ -405,6 +432,8 @@
       UI.addMessage(myAnonId, text, true);
       $('min').value = '';
       $('min').style.height = 'auto';
+    } else {
+      UI.addSystem('Nachricht konnte nicht gesendet werden');
     }
   }
 
@@ -413,7 +442,10 @@
   // ══════════════════════════════════════════
 
   function relayTo(peerAnonId, data) {
-    if (!socket || socket.readyState !== 1) return;
+    if (!socket || socket.readyState !== 1) {
+      UI.log(`Relay nicht bereit`, 'no');
+      return;
+    }
     socket.send(JSON.stringify({
       type: 'relay',
       to: peerAnonId,
