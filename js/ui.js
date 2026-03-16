@@ -4,7 +4,6 @@
 
 const UI = (() => {
 
-  // Debug-Log (versteckt, nur für Entwicklung)
   function log(msg, cls) {
     const el = $('log');
     if (!el) return;
