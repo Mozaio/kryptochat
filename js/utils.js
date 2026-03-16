@@ -19,9 +19,10 @@ const U8 = {
   dec: u => new TextDecoder().decode(u)
 };
 
-const uid = () => {
-  const b = nacl.randomBytes(6);
-  return Array.from(b).map(x => x.toString(36)).join('').substring(0, 8);
+// Anonyme ID — zufällig, nicht an Person gebunden
+const anonId = () => {
+  const b = nacl.randomBytes(16);
+  return 'a' + Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
 };
 
 const esc = s => {
@@ -29,9 +30,3 @@ const esc = s => {
   d.textContent = s;
   return d.innerHTML;
 };
-
-// SHA-512 via Web Crypto API (statt nacl.hash)
-async function sha512(data) {
-  const hashBuffer = await crypto.subtle.digest('SHA-512', data);
-  return new Uint8Array(hashBuffer);
-}
