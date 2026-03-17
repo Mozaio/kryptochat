@@ -1,6 +1,7 @@
-/* ═══════════════════════════════════════════
-   ui.js — DOM-Manipulation
-   ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════
+   ui.js — v4
+   Neu: showSessionFingerprint (zeigt shared-secret-basierten FP)
+   ═══════════════════════════════════════════════════ */
 
 const UI = (() => {
 
@@ -9,7 +10,7 @@ const UI = (() => {
     if (!el) return;
     const t = new Date().toLocaleTimeString('de-DE');
     const d = document.createElement('div');
-    d.className = cls || '';
+    d.className  = cls || '';
     d.textContent = `[${t}] ${msg}`;
     el.appendChild(d);
     el.scrollTop = el.scrollHeight;
@@ -25,16 +26,14 @@ const UI = (() => {
     if (mc) requestAnimationFrame(() => { mc.scrollTop = mc.scrollHeight; });
   }
 
-  function shortId(id) {
-    return id.slice(0, 8) + '..';
-  }
+  function shortId(id) { return id.slice(0, 8) + '..'; }
 
   function addMessage(senderId, text, isOutgoing) {
     const es = $('es');
     if (es) es.remove();
 
     const g = document.createElement('div');
-    g.className = `mg ${isOutgoing ? 'out' : 'in'}`;
+    g.className  = `mg ${isOutgoing ? 'out' : 'in'}`;
     const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
 
     g.innerHTML = `
@@ -42,7 +41,6 @@ const UI = (() => {
       <div class="mb">${esc(text)}</div>
       <div class="mm"><span class="mt">${t}</span></div>
     `;
-
     $('mc').appendChild(g);
     scrollToBottom();
   }
@@ -50,7 +48,7 @@ const UI = (() => {
   function addSystem(text, highlight) {
     const d = document.createElement('div');
     d.className = `mg sys ${highlight ? 'h' : ''}`;
-    d.innerHTML = `<span>${text}</span>`;
+    d.innerHTML = `<span>${esc(text)}</span>`;
     $('mc').appendChild(d);
     scrollToBottom();
   }
@@ -75,25 +73,48 @@ const UI = (() => {
     sessionsMap.forEach((s, id) => {
       const li = document.createElement('li');
       li.className = 'p-i';
-
       const dotClass = s.verified ? 'sd' : 'sd w';
       const btnLabel = s.verified ? '✓' : (s.established ? '⚠' : '?');
       const btnClass = s.verified ? 'bv ok' : 'bv';
-
       li.innerHTML = `
         <div class="p-inf">
           <div class="${dotClass}"></div>
           <span class="p-nm">${esc(shortId(id))}</span>
         </div>
-        <button class="${btnClass}" data-p="${id}">${btnLabel}</button>
+        <button class="${btnClass}" data-p="${esc(id)}">${btnLabel}</button>
       `;
       pl.appendChild(li);
     });
   }
 
+  // ── Fingerprint-Modal: Session-Fingerprint ────────
+  // Zeigt den shared-secret-basierten Fingerprint.
+  // Beide Peers müssen denselben Fingerprint sehen —
+  // wenn nicht, ist ein MITM aktiv.
+
+  function showSessionFingerprint(sessionFp, peerId) {
+    // Beide Seiten zeigen denselben Session-Fingerprint
+    $('mfp').textContent = sessionFp;
+    $('pfp').textContent = sessionFp;
+
+    // Label anpassen
+    const labels = document.querySelectorAll('.fp-b label');
+    if (labels[0]) labels[0].textContent = 'Session-Fingerprint (deine Seite)';
+    if (labels[1]) labels[1].textContent = 'Session-Fingerprint (Peer-Seite)';
+
+    $('fpm').dataset.peer = peerId;
+    $('fpm').classList.add('v');
+  }
+
+  // Fallback: klassischer Key-Fingerprint
   function showFingerprint(myPubKey, peerPubKey, peerId) {
-    $('mfp').textContent = Crypto.fingerprint(myPubKey);
-    $('pfp').textContent = Crypto.fingerprint(peerPubKey);
+    $('mfp').textContent = Crypto.fingerprintKey(myPubKey);
+    $('pfp').textContent = Crypto.fingerprintKey(peerPubKey);
+
+    const labels = document.querySelectorAll('.fp-b label');
+    if (labels[0]) labels[0].textContent = 'Dein Fingerabdruck';
+    if (labels[1]) labels[1].textContent = 'Peer Fingerabdruck';
+
     $('fpm').dataset.peer = peerId;
     $('fpm').classList.add('v');
   }
@@ -105,13 +126,13 @@ const UI = (() => {
   function showRoom(roomName) {
     $('ov').classList.add('h');
     $('app').classList.add('v');
-    $('drm').textContent = roomName;
-    $('ct').textContent = '#' + roomName;
-    $('min').disabled = false;
-    $('sbtn').disabled = false;
+    $('drm').textContent   = roomName;
+    $('ct').textContent    = '#' + roomName;
+    $('min').disabled      = false;
+    $('sbtn').disabled     = false;
     $('min').focus();
-    $('est').textContent = 'Verbunden';
-    $('est').style.color = 'var(--gn)';
+    $('est').textContent   = 'Verbunden';
+    $('est').style.color   = 'var(--gn)';
   }
 
   function setJoinStatus(text) {
@@ -127,7 +148,10 @@ const UI = (() => {
   return {
     log, initLogToggle, scrollToBottom,
     addMessage, addSystem,
-    updatePeers, showFingerprint, hideFingerprint,
+    updatePeers,
+    showSessionFingerprint,  // NEU
+    showFingerprint,
+    hideFingerprint,
     showRoom, setJoinStatus, setJoinDisabled
   };
 })();
