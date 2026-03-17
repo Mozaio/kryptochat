@@ -4,7 +4,7 @@
    ③ Signing mit Domain-Separator (Cross-Protocol-Schutz)
    ④ Transcript-Hash (laufender SHA-512 über alle Nachrichten)
 */
-const Crypto = (() => {
+const KCrypto = (() => {
 
   const SIGN_DOMAIN = 'kryptochat-sign-v1:';
 
