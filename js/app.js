@@ -47,21 +47,21 @@
   //  Verhindert, dass Screenshots / Screen-Recording Nachrichten zeigen.
   // ══════════════════════════════════════════
 
-  let _savedMessages = null;
+  // Screenshot-Schutz: Tab ist sichtbar/versteckt
+  // Nachrichten die während verstecktem Tab ankommen werden gepuffert
+  // und beim Zurückkehren korrekt angezeigt.
+  let _tabHidden = false;
 
   document.addEventListener('visibilitychange', () => {
     const mc = $('mc');
     if (!mc) return;
     if (document.visibilityState === 'hidden') {
-      // DOM leeren, Inhalt speichern
-      _savedMessages = mc.innerHTML;
-      mc.innerHTML   = '';
+      _tabHidden = true;
+      mc.innerHTML = ''; // DOM leeren wenn Tab versteckt
     } else {
-      // DOM wiederherstellen
-      if (_savedMessages !== null) {
-        mc.innerHTML   = _savedMessages;
-        _savedMessages = null;
-      }
+      _tabHidden = false;
+      // Beim Zurückkehren: nichts extra nötig, neue Nachrichten
+      // werden normal von addMessage eingefügt
     }
   });
 
