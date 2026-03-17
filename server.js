@@ -69,7 +69,7 @@ function handleReq(req, res) {
 const wss   = new WebSocketServer({ server });
 const rooms = new Map();
 
-// Rate-Limit: 80/10s (großzügig wegen Dummy-Traffic)
+// Rate-Limit pro Connection: 80 Nachrichten / 10s (Dummy-Traffic berücksichtigt)
 const RATE_WINDOW = 10000, RATE_MAX = 80;
 function allowRate(ws) {
   const now = Date.now();
@@ -78,6 +78,28 @@ function allowRate(ws) {
   if (ws._rt.length >= RATE_MAX) return false;
   ws._rt.push(now); return true;
 }
+
+// IP-Rate-Limit: max 5 neue Verbindungen pro IP pro Minute (Join-Flood-Schutz)
+const ipJoinMap = new Map();
+const IP_JOIN_WINDOW = 60000, IP_JOIN_MAX = 5;
+function allowIPJoin(ip) {
+  const now = Date.now();
+  if (!ipJoinMap.has(ip)) ipJoinMap.set(ip, []);
+  const times = ipJoinMap.get(ip).filter(t => now - t < IP_JOIN_WINDOW);
+  if (times.length >= IP_JOIN_MAX) return false;
+  times.push(now);
+  ipJoinMap.set(ip, times);
+  return true;
+}
+// Cleanup IP-Map alle 5 Minuten
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, times] of ipJoinMap) {
+    const fresh = times.filter(t => now - t < IP_JOIN_WINDOW);
+    if (fresh.length === 0) ipJoinMap.delete(ip);
+    else ipJoinMap.set(ip, fresh);
+  }
+}, 300000);
 
 const hbInterval = setInterval(() => {
   wss.clients.forEach(ws => {
@@ -98,9 +120,12 @@ wss.on('connection', ws => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'join') {
-      if (roomId) return;
+      if (roomId) return; // Doppeltes Join verhindern
       if (!msg.room || typeof msg.room !== 'string' || msg.room.length > 128) return;
       if (!msg.anonId || typeof msg.anonId !== 'string' || msg.anonId.length > 80) return;
+      // IP-Flood-Schutz
+      const ip = (ws._socket?.remoteAddress || ws._req?.socket?.remoteAddress || 'unknown');
+      if (!allowIPJoin(ip)) { ws.close(1008, 'Rate limit'); return; }
       roomId = hashRoom(msg.room); anonId = msg.anonId;
       if (!rooms.has(roomId)) rooms.set(roomId, new Map());
       const room = rooms.get(roomId);
