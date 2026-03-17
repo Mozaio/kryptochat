@@ -85,8 +85,8 @@ const UI = (() => {
   }
 
   function showFingerprint(myPubKey, peerPubKey, peerId) {
-    $('mfp').textContent = Crypto.fingerprintKey(myPubKey);
-    $('pfp').textContent = Crypto.fingerprintKey(peerPubKey);
+    $('mfp').textContent = KCrypto.fingerprintKey(myPubKey);
+    $('pfp').textContent = KCrypto.fingerprintKey(peerPubKey);
     const labels = document.querySelectorAll('.fp-b label');
     if (labels[0]) labels[0].textContent = 'Dein Fingerabdruck';
     if (labels[1]) labels[1].textContent = 'Peer Fingerabdruck';
