@@ -80,38 +80,11 @@ const Session = (() => {
   //  Bob setzt nextRecvHeaderKey = dieses headerKey → decrypt() Stufe 2 ✓
   // ══════════════════════════════════════════
 
-  async function initRatchet(peerAnonId) {
+  function initRatchet(peerAnonId) {
     const s = sessions.get(peerAnonId);
     if (!s || !s.sharedSecret) return false;
 
     s.ratchet = DoubleRatchet.create(s.sharedSecret);
-
-    // FIX ①: nextRecvHeaderKey vorinitialisieren.
-    // HKDF ist async → initRatchet muss async sein.
-    // Wir leiten denselben headerKey ab, den encrypt() beim ersten
-    // Aufruf (DUMMY_DH-Pfad) berechnen würde:
-    //   kdfRK(sharedSecret, DUMMY_DH) → rootKey2 + chainKey + headerKey
-    // Dieses headerKey ist Alices sendHeaderKey für die erste Nachricht.
-    // Bob speichert es als nextRecvHeaderKey.
-    try {
-      const ikmKey = await crypto.subtle.importKey(
-        'raw', new Uint8Array(32), // DUMMY_DH
-        { name: 'HKDF' }, false, ['deriveBits']
-      );
-      const bits = await crypto.subtle.deriveBits(
-        { name: 'HKDF', hash: 'SHA-512',
-          salt: s.sharedSecret,
-          info: new TextEncoder().encode('kryptochat-ratchet-root-v1') },
-        ikmKey, 96 * 8
-      );
-      const out = new Uint8Array(bits);
-      // out[64..96] = headerKey, identisch mit Alices sendHeaderKey
-      s.ratchet.nextRecvHeaderKey = out.slice(64, 96);
-      burn(out);
-    } catch (e) {
-      console.error('[Kryptochat] initRatchet HKDF Fehler:', e);
-      return false;
-    }
 
     // Sealed-Sender-Key ableiten
     const si = new Uint8Array(64);
@@ -149,7 +122,7 @@ const Session = (() => {
       s.established  = true;
 
       // initRatchet ist jetzt async
-      await initRatchet(peerAnonId);
+      initRatchet(peerAnonId);
 
       burn(combined, ephShared, h);
       return true;
@@ -176,10 +149,10 @@ const Session = (() => {
     return await DoubleRatchet.encrypt(s.ratchet, plaintext);
   }
 
-  async function decryptMessage(peerAnonId, encHeader, nonce, ciphertext) {
+  async function decryptMessage(peerAnonId, header, nonce, ciphertext) {
     const s = sessions.get(peerAnonId);
     if (!s || !s.ratchet) return null;
-    return await DoubleRatchet.decrypt(s.ratchet, encHeader, nonce, ciphertext);
+    return await DoubleRatchet.decrypt(s.ratchet, header, nonce, ciphertext);
   }
 
   // ── Sealed Sender ─────────────────────────────────
@@ -209,7 +182,7 @@ const Session = (() => {
         const dummy  = 'dummy:' + B64.enc(nacl.randomBytes(16));
         const enc    = await DoubleRatchet.encrypt(s.ratchet, dummy);
         const sealed = sealSenderId(s.sealedKey, _myAnonId);
-        const payload = { type: 'enc', eh: enc.encHeader, n: enc.nonce, c: enc.ciphertext,
+        const payload = { type: 'enc', h: enc.header, n: enc.nonce, c: enc.ciphertext,
                           si: sealed.sealedId, sn: sealed.sealedNonce };
         const inner  = B64.enc(new TextEncoder().encode(JSON.stringify(payload)));
         _socket.send(JSON.stringify({ type: 'relay', to: peerId, d: inner }));
