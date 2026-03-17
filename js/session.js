@@ -83,7 +83,7 @@ const Session = (() => {
       const h = new Uint8Array(buf);
       s.sharedSecret = h.slice(0, 32);
       s.established  = true;
-      await initRatchet(id);
+      initRatchet(id); // async, fire-and-forget — Header-Keys gesetzt bevor erste Msg
       burn(combined, ephShared, h);
       return true;
     });
@@ -92,7 +92,7 @@ const Session = (() => {
   function getSessionFingerprint(id) {
     const s = sessions.get(id);
     if (!s || !s.sharedSecret || !_myLongTermPubKey || !s.theirPubKey) return null;
-    return Crypto.fingerprintSession(s.sharedSecret, _myLongTermPubKey, s.theirPubKey);
+    return KCrypto.fingerprintSession(s.sharedSecret, _myLongTermPubKey, s.theirPubKey);
   }
 
   async function encryptMessage(id, plaintext) {
