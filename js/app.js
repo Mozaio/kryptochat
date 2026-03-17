@@ -16,6 +16,7 @@
   const mySigning = Crypto.generateSigningKeyPair();
   const myAnonId  = makeAnonId();
   let socket = null, room = null, connected = false;
+  const _seenCommits = new Set(); // Replay-Schutz für Key-Exchange-Commits
 
   Session.setMyLongTermKey(myKeys.publicKey);
   $('mid').textContent = myAnonId.slice(0, 8);
@@ -39,7 +40,7 @@
     Session.destroyAll();
     Crypto.resetTranscript();
     const mc = $('mc'); if (mc) mc.innerHTML = '';
-    socket = null; room = null;
+    socket = null; room = null; _seenCommits.clear();
   }
   window.addEventListener('beforeunload', cleanup);
   window.addEventListener('pagehide',     cleanup);
@@ -79,8 +80,11 @@
       Session.stopDummyTraffic();
       socket = null;
       $('est').textContent = 'Getrennt'; $('est').style.color = 'var(--rd)';
-      UI.addSystem('Verbindung verloren...');
-      Session.destroyAll(); UI.updatePeers(Session.getAll());
+      UI.addSystem('Verbindung verloren — reconnecte...');
+      // Sessions NICHT zerstören bei Reconnect — Ratchet-State bleibt erhalten.
+      // Wenn der Peer sich wieder verbindet, läuft der Key-Exchange neu und der
+      // bestehende Ratchet wird durch einen neuen ersetzt. Das ist sicher.
+      UI.updatePeers(Session.getAll());
       setTimeout(() => { if (room && !connected) connect(room); }, 3000);
     };
     socket.onerror = () => { UI.log('Relay Fehler', 'no'); UI.setJoinStatus('Fehler!'); UI.setJoinDisabled(false); };
@@ -143,6 +147,18 @@
   }
 
   function handleCommit(d) {
+    // Replay-Schutz: gleicher Commit darf nicht zweimal verarbeitet werden
+    const commitKey = d.from + ':' + d.comm + ':' + d.timestamp;
+    if (_seenCommits.has(commitKey)) return;
+    _seenCommits.add(commitKey);
+    // Cache-Größe begrenzen
+    if (_seenCommits.size > 200) {
+      const iter = _seenCommits.values();
+      while (_seenCommits.size > 100) { const v = iter.next(); if (v.done) break; _seenCommits.delete(v.value); }
+    }
+    // Timestamp prüfen (Commit darf max. 60s alt sein)
+    if (Math.abs(Date.now() - d.timestamp) > 60000) return;
+
     let s = Session.getSession(d.from);
     if (!s) s = Session.createSession(d.from, null);
     s.theirCommitment      = B64.dec(d.comm);
@@ -170,7 +186,7 @@
   async function handleKey(d) {
     const s = Session.getSession(d.from);
     if (!s) return;
-    if (Math.abs(Date.now() - d.timestamp) > 60000) return;
+    if (Math.abs(Date.now() - d.timestamp) > 30000) return;
 
     const sigData = { from: d.from, to: d.to, pubKey: d.pubKey, ephemeralPubKey: d.ephemeralPubKey, commitNonce: d.commitNonce, timestamp: d.timestamp };
     if (!Crypto.verify(sigData, B64.dec(d.signature), B64.dec(d.signingPubKey))) {
