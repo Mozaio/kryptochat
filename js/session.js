@@ -1,12 +1,13 @@
 /* ═══════════════════════════════════════════════════
-   session.js — v4 (Security-Hardened)
+   session.js — v4.1 (Bugfix)
 
-   Neu:
-   ① Session-Fingerprint: bestätigt shared secret beidseitig
-   ② Dummy-Traffic: sendet verschlüsselte Fake-Pakete in Pausen
-      → Traffic-Analyse kann nicht unterscheiden ob jemand schreibt
-   ③ Key-Rotation-Warnung nach 1000 Nachrichten
-   ④ Alle sensiblen Daten werden bei removeSession geburnt
+   FIX ①: initRatchet() leitet nextRecvHeaderKey aus
+           demselben DUMMY_DH-Pfad ab, den encrypt()
+           beim ersten Senden nutzt.
+           → Bob kann Alices erste Nachricht entschlüsseln.
+
+   FIX ②: Dummy-Traffic prüft isDummy() korrekt
+           (war bereits richtig, keine Änderung).
    ═══════════════════════════════════════════════════ */
 
 const Session = (() => {
@@ -18,7 +19,6 @@ const Session = (() => {
 
   function setMyLongTermKey(pubKey) { _myLongTermPubKey = pubKey; }
 
-  // Wird von app.js gesetzt, damit Session.sendDummy() den Socket nutzen kann
   function setSocket(socket, anonId) {
     _socket   = socket;
     _myAnonId = anonId;
@@ -36,13 +36,13 @@ const Session = (() => {
       verified:             false,
       established:          false,
       keySent:              false,
-      myCommitment:         null,   // Uint8Array(32)
-      myCommitNonce:        null,   // NEU: Blinding-Nonce für Reveal
+      myCommitment:         null,
+      myCommitNonce:        null,
       myCommitTimestamp:    0,
       theirCommitment:      null,
-      theirCommitNonce:     null,   // NEU: Nonce vom Peer für Verifikation
+      theirCommitNonce:     null,
       theirCommitTimestamp: 0,
-      msgCount:             0,      // NEU: für Key-Rotation-Warnung
+      msgCount:             0,
       lastHeartbeat:        0,
       createdAt:            Date.now()
     };
@@ -57,23 +57,69 @@ const Session = (() => {
     if (!s) return;
     burn(s.sharedSecret, s.sealedKey, s.myCommitment, s.myCommitNonce,
          s.theirCommitment, s.theirCommitNonce);
-    if (s.myEphemeral)  burn(s.myEphemeral.secretKey, s.myEphemeral.publicKey);
-    if (s.ratchet)      DoubleRatchet.destroy(s.ratchet);
+    if (s.myEphemeral) burn(s.myEphemeral.secretKey, s.myEphemeral.publicKey);
+    if (s.ratchet)     DoubleRatchet.destroy(s.ratchet);
     sessions.delete(peerAnonId);
   }
 
-  function initRatchet(peerAnonId) {
+  // ══════════════════════════════════════════
+  //  initRatchet — FIX ①
+  //
+  //  Beide Seiten (Alice und Bob) leiten beim Start aus demselben
+  //  sharedSecret + DUMMY_DH denselben rootKey → headerKey ab.
+  //
+  //  Alice (Sender der ersten Nachricht):
+  //    encrypt() → DUMMY_DH → sendHeaderKey = X
+  //
+  //  Bob (Empfänger der ersten Nachricht):
+  //    Muss X in nextRecvHeaderKey haben, damit decrypt() Stufe 2 trifft.
+  //    (recvHeaderKey ist noch null, da kein DH-Ratchet stattgefunden hat)
+  //
+  //  Da kdfRK deterministisch ist und beide denselben sharedSecret haben,
+  //  leiten beide dasselbe headerKey ab.
+  //  Bob setzt nextRecvHeaderKey = dieses headerKey → decrypt() Stufe 2 ✓
+  // ══════════════════════════════════════════
+
+  async function initRatchet(peerAnonId) {
     const s = sessions.get(peerAnonId);
     if (!s || !s.sharedSecret) return false;
 
     s.ratchet = DoubleRatchet.create(s.sharedSecret);
 
+    // FIX ①: nextRecvHeaderKey vorinitialisieren.
+    // HKDF ist async → initRatchet muss async sein.
+    // Wir leiten denselben headerKey ab, den encrypt() beim ersten
+    // Aufruf (DUMMY_DH-Pfad) berechnen würde:
+    //   kdfRK(sharedSecret, DUMMY_DH) → rootKey2 + chainKey + headerKey
+    // Dieses headerKey ist Alices sendHeaderKey für die erste Nachricht.
+    // Bob speichert es als nextRecvHeaderKey.
+    try {
+      const ikmKey = await crypto.subtle.importKey(
+        'raw', new Uint8Array(32), // DUMMY_DH
+        { name: 'HKDF' }, false, ['deriveBits']
+      );
+      const bits = await crypto.subtle.deriveBits(
+        { name: 'HKDF', hash: 'SHA-512',
+          salt: s.sharedSecret,
+          info: new TextEncoder().encode('kryptochat-ratchet-root-v1') },
+        ikmKey, 96 * 8
+      );
+      const out = new Uint8Array(bits);
+      // out[64..96] = headerKey, identisch mit Alices sendHeaderKey
+      s.ratchet.nextRecvHeaderKey = out.slice(64, 96);
+      burn(out);
+    } catch (e) {
+      console.error('[Kryptochat] initRatchet HKDF Fehler:', e);
+      return false;
+    }
+
     // Sealed-Sender-Key ableiten
     const si = new Uint8Array(64);
     si.set(s.sharedSecret, 0);
-    si.set(U8.enc('sealed-sender-v1'), 32);
+    si.set(new TextEncoder().encode('sealed-sender-v1'), 32);
     s.sealedKey = nacl.hash(si).slice(0, 32);
     burn(si);
+
     return true;
   }
 
@@ -84,7 +130,6 @@ const Session = (() => {
 
     const ephShared = nacl.box.before(s.theirEphemeralPub, s.myEphemeral.secretKey);
 
-    // Canonical Ordering der Long-Term-Keys
     let lt1, lt2, cmp = false;
     for (let i = 0; i < 32; i++) {
       if (_myLongTermPubKey[i] < s.theirPubKey[i]) { cmp = true;  break; }
@@ -98,21 +143,20 @@ const Session = (() => {
     combined.set(lt1, 32);
     combined.set(lt2, 64);
 
-    return crypto.subtle.digest('SHA-512', combined).then(buf => {
+    return crypto.subtle.digest('SHA-512', combined).then(async buf => {
       const h = new Uint8Array(buf);
       s.sharedSecret = h.slice(0, 32);
       s.established  = true;
-      initRatchet(peerAnonId);
+
+      // initRatchet ist jetzt async
+      await initRatchet(peerAnonId);
+
       burn(combined, ephShared, h);
       return true;
     });
   }
 
   // ── Session-Fingerprint ───────────────────────────
-  // Gibt einen Fingerprint zurück, der den Shared Secret einschließt.
-  // Stimmt der Fingerprint auf beiden Seiten überein, ist garantiert:
-  //   - Kein MITM (sonst wäre sharedSecret verschieden)
-  //   - Beidseitige Authentizität
 
   function getSessionFingerprint(peerAnonId) {
     const s = sessions.get(peerAnonId);
@@ -120,18 +164,15 @@ const Session = (() => {
     return Crypto.fingerprintSession(s.sharedSecret, _myLongTermPubKey, s.theirPubKey);
   }
 
-  // ── Encrypt / Decrypt (async) ─────────────────────
+  // ── Encrypt / Decrypt ─────────────────────────────
 
   async function encryptMessage(peerAnonId, plaintext) {
     const s = sessions.get(peerAnonId);
     if (!s || !s.ratchet) return null;
-
-    // Key-Rotation-Warnung bei langen Sessions
     s.msgCount = (s.msgCount || 0) + 1;
     if (s.msgCount >= 900 && s.msgCount % 100 === 0) {
       console.warn(`[Kryptochat] Session ${peerAnonId.slice(0,8)} hat ${s.msgCount} Nachrichten. Neue Session empfohlen.`);
     }
-
     return await DoubleRatchet.encrypt(s.ratchet, plaintext);
   }
 
@@ -145,7 +186,7 @@ const Session = (() => {
 
   function sealSenderId(sealedKey, senderAnonId) {
     const nonce = nacl.randomBytes(24);
-    const data  = U8.enc(senderAnonId);
+    const data  = new TextEncoder().encode(senderAnonId);
     const enc   = nacl.secretbox(data, nonce, sealedKey);
     burn(data);
     return { sealedId: B64.enc(enc), sealedNonce: B64.enc(nonce) };
@@ -154,29 +195,23 @@ const Session = (() => {
   function unsealSenderId(sealedKey, sealedIdB64, sealedNonceB64) {
     try {
       const data = nacl.secretbox.open(B64.dec(sealedIdB64), B64.dec(sealedNonceB64), sealedKey);
-      return data ? U8.dec(data) : null;
+      return data ? new TextDecoder().decode(data) : null;
     } catch { return null; }
   }
 
   // ── Dummy-Traffic ─────────────────────────────────
-  // Sendet verschlüsselte Fake-Nachrichten in zufälligen Intervallen.
-  // Ein Netzwerk-Beobachter kann nicht unterscheiden, ob echte oder
-  // Dummy-Nachrichten gesendet werden → Traffic-Analyse erschwert.
-  //
-  // Dummy-Nachrichten werden mit dem echten Ratchet verschlüsselt,
-  // beginnen intern mit "dummy:" und werden vom Empfänger still verworfen.
 
   async function _sendDummy() {
     if (!_socket || _socket.readyState !== 1) return;
     for (const [peerId, s] of sessions) {
       if (!s.ratchet || !s.sealedKey || !s.verified) continue;
       try {
-        const dummy   = 'dummy:' + B64.enc(nacl.randomBytes(16));
-        const enc     = await DoubleRatchet.encrypt(s.ratchet, dummy);
-        const sealed  = sealSenderId(s.sealedKey, _myAnonId);
+        const dummy  = 'dummy:' + B64.enc(nacl.randomBytes(16));
+        const enc    = await DoubleRatchet.encrypt(s.ratchet, dummy);
+        const sealed = sealSenderId(s.sealedKey, _myAnonId);
         const payload = { type: 'enc', eh: enc.encHeader, n: enc.nonce, c: enc.ciphertext,
                           si: sealed.sealedId, sn: sealed.sealedNonce };
-        const inner   = B64.enc(U8.enc(JSON.stringify(payload)));
+        const inner  = B64.enc(new TextEncoder().encode(JSON.stringify(payload)));
         _socket.send(JSON.stringify({ type: 'relay', to: peerId, d: inner }));
       } catch { /* still */ }
     }
@@ -184,12 +219,11 @@ const Session = (() => {
 
   function startDummyTraffic() {
     stopDummyTraffic();
-    // Zufälliges Intervall: 8-25 Sekunden
     function schedule() {
       const delay = 8000 + (nacl.randomBytes(4)[0] / 255) * 17000;
       _dummyTimer = setTimeout(async () => {
         await _sendDummy();
-        schedule(); // rekursiv mit neuem zufälligem Delay
+        schedule();
       }, delay);
     }
     schedule();
@@ -199,9 +233,8 @@ const Session = (() => {
     if (_dummyTimer) { clearTimeout(_dummyTimer); _dummyTimer = null; }
   }
 
-  // Prüft ob eine entschlüsselte Nachricht ein Dummy ist
-  function isDummy(plaintext) {
-    return typeof plaintext === 'string' && plaintext.startsWith('dummy:');
+  function isDummy(pt) {
+    return typeof pt === 'string' && pt.startsWith('dummy:');
   }
 
   // ── Heartbeat ─────────────────────────────────────
@@ -223,12 +256,10 @@ const Session = (() => {
     setMyLongTermKey, setSocket,
     createSession, getSession, removeSession,
     computeSharedSecret, initRatchet,
-    getSessionFingerprint,        // NEU: Session-basierter Fingerprint
+    getSessionFingerprint,
     encryptMessage, decryptMessage,
     sealSenderId, unsealSenderId,
-    startDummyTraffic,            // NEU
-    stopDummyTraffic,             // NEU
-    isDummy,                      // NEU
+    startDummyTraffic, stopDummyTraffic, isDummy,
     needsHeartbeat, recordHeartbeat,
     getAll, destroyAll
   };
