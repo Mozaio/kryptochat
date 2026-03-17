@@ -372,7 +372,7 @@
     if (!targetPeerId) return;
 
     try {
-      const plaintext = await Session.decryptMessage(targetPeerId, d.eh, d.n, d.c);
+      const plaintext = await Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
       if (plaintext === null) return;
 
       // Dummy-Nachrichten still verwerfen
@@ -423,7 +423,7 @@
 
         relayEncrypted(peerId, {
           type: 'enc',
-          eh: encrypted.encHeader,
+          h: encrypted.header,
           n:  encrypted.nonce,
           c:  encrypted.ciphertext,
           si: sealed.sealedId,
