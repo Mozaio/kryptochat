@@ -238,7 +238,8 @@
     if (!targetPeerId) return;
 
     try {
-      const pt = await Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
+      // Support encHeader (v7) and header (v6 fallback)
+      const pt = await Session.decryptMessage(targetPeerId, d.eh || d.h, d.n, d.c);
       if (pt === null) return;
       if (Session.isDummy(pt)) return;
 
@@ -286,7 +287,8 @@
         if (!enc) continue;
         const sealed = Session.sealSenderId(s.sealedKey, myAnonId);
         await jitter(10, 80);
-        relayEncrypted(peerId, { type: 'enc', h: enc.header, n: enc.nonce, c: enc.ciphertext, si: sealed.sealedId, sn: sealed.sealedNonce });
+        // enc.encHeader = verschlüsselter Header (v7), enc.header = Klartext (v6 fallback)
+        relayEncrypted(peerId, { type: 'enc', eh: enc.encHeader, h: enc.header, n: enc.nonce, c: enc.ciphertext, si: sealed.sealedId, sn: sealed.sealedNonce });
         sent++;
       } catch (e) { UI.log(`Send Error: ${e.message}`, 'no'); }
     }
