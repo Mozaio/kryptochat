@@ -404,10 +404,15 @@
     const sessions = Session.getAll();
     if (sessions.size === 0) { UI.addSystem('Kein Peer verbunden'); return; }
 
-    // Erzwungene Verifikation
+    // Verifizierung optional: blockiert nur wenn kein Ratchet vorhanden
     let hasUnverified = false;
-    sessions.forEach(s => { if (!s.verified) hasUnverified = true; });
-    if (hasUnverified) { UI.addSystem('🔒 VERIFIZIERUNG ERFORDERLICH — Klicke auf "⚠"'); return; }
+    sessions.forEach(s => { if (!s.established) hasUnverified = true; });
+    if (hasUnverified) { UI.addSystem('Kein etablierter Ratchet — warte kurz...'); return; }
+
+    // Warnung (kein Blocker mehr)
+    let anyUnverified = false;
+    sessions.forEach(s => { if (!s.verified) anyUnverified = true; });
+    if (anyUnverified) UI.addSystem('⚠ Fingerabdruck nicht geprüft — klicke ⚠ um MITM auszuschließen');
 
     let sent = 0;
     for (const [peerId, session] of sessions) {
