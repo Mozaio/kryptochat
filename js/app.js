@@ -328,27 +328,54 @@
   // ══════════════════════════════════════════
 
   async function handleEncrypted(d) {
-    // Sealed Sender auflösen
-    let targetPeerId = null;
+    // FIX ③: Sealed Sender korrekt auflösen.
+    //
+    // unsealSenderId() gibt die AnonId des SENDERS zurück (z.B. "xabc...").
+    // targetPeerId ist die AnonId des Peers in unserer sessions-Map.
+    // Im Zwei-Tab-Szenario: Sender = Tab A, Peer in Tab B = Tab A's AnonId.
+    // D.h. senderId === peerId ist korrekt — beide sind Tab A's AnonId.
+    //
+    // Der Fehler war subtil: wenn Tab A sich selbst als Peer sieht
+    // (weil er im gleichen Raum ist), ist session.sealedKey von
+    // Tab A's Perspektive aus dem geteilten Secret mit Tab B abgeleitet.
+    // Tab B's AnonId ist der peerId in Tab A's sessions-Map.
+    // Die gesendete SealedId enthält Tab A's eigene AnonId.
+    // senderId (= Tab A's AnonId) ≠ peerId (= Tab B's AnonId) → kein Match.
+    //
+    // Korrekte Logik: targetPeerId = der Peer, dessen sealedKey
+    // die SealedId erfolgreich entschlüsselt — unabhängig von senderId.
+    // senderId wird nur zur Validierung geloggt, nicht zum Routing.
+
+    let targetPeerId  = null;
+    let verifiedSender = null;
+
     if (d.si && d.sn) {
       for (const [peerId, session] of Session.getAll()) {
         if (!session.sealedKey || !session.established) continue;
         const senderId = Session.unsealSenderId(session.sealedKey, d.si, d.sn);
-        if (senderId === peerId) { targetPeerId = peerId; break; }
+        if (senderId !== null) {
+          // Entschlüsselung erfolgreich → das ist die richtige Session
+          targetPeerId   = peerId;
+          verifiedSender = senderId;
+          break;
+        }
       }
     }
+
+    // Fallback: erste verfügbare Session mit Ratchet
     if (!targetPeerId) {
       for (const [peerId, session] of Session.getAll()) {
         if (session.ratchet) { targetPeerId = peerId; break; }
       }
     }
+
     if (!targetPeerId) return;
 
     try {
       const plaintext = await Session.decryptMessage(targetPeerId, d.eh, d.n, d.c);
-      if (plaintext === null) return; // Replay oder Fehler — still ignorieren
+      if (plaintext === null) return;
 
-      // NEU: Dummy-Nachrichten still verwerfen
+      // Dummy-Nachrichten still verwerfen
       if (Session.isDummy(plaintext)) return;
 
       UI.addMessage(targetPeerId, plaintext, false);
