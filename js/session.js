@@ -39,15 +39,29 @@ const Session = (() => {
     sessions.delete(id);
   }
 
-  function initRatchet(id) {
+  async function initRatchet(id) {
     const s = sessions.get(id);
     if (!s || !s.sharedSecret) return false;
     s.ratchet = DoubleRatchet.create(s.sharedSecret);
+
+    // Sealed-Sender-Key
     const si = new Uint8Array(64);
     si.set(s.sharedSecret, 0);
     si.set(new TextEncoder().encode('sealed-sender-v1'), 32);
     s.sealedKey = nacl.hash(si).slice(0, 32);
     burn(si);
+
+    // isAlice: wer den kleineren Long-Term-Key hat (deterministisch, beide Seiten gleich)
+    let isAlice = false;
+    if (_myLongTermPubKey && s.theirPubKey) {
+      for (let i = 0; i < 32; i++) {
+        if (_myLongTermPubKey[i] < s.theirPubKey[i]) { isAlice = true;  break; }
+        if (_myLongTermPubKey[i] > s.theirPubKey[i]) { isAlice = false; break; }
+      }
+    }
+    // Header-Keys deterministisch aus sharedSecret ableiten
+    await DoubleRatchet.initHeaderKeys(s.ratchet, s.sharedSecret, isAlice);
+    s.isAlice = isAlice;
     return true;
   }
 
@@ -69,7 +83,7 @@ const Session = (() => {
       const h = new Uint8Array(buf);
       s.sharedSecret = h.slice(0, 32);
       s.established  = true;
-      initRatchet(id);
+      await initRatchet(id);
       burn(combined, ephShared, h);
       return true;
     });
@@ -120,7 +134,7 @@ const Session = (() => {
         const enc    = await DoubleRatchet.encrypt(s.ratchet, dummy);
         if (!enc) continue;
         const sealed = sealSenderId(s.sealedKey, _myAnonId);
-        const payload = { type: 'enc', h: enc.header, n: enc.nonce, c: enc.ciphertext, si: sealed.sealedId, sn: sealed.sealedNonce };
+        const payload = { type: 'enc', eh: enc.encHeader, h: enc.header, n: enc.nonce, c: enc.ciphertext, si: sealed.sealedId, sn: sealed.sealedNonce };
         const inner  = B64.enc(new TextEncoder().encode(JSON.stringify(payload)));
         _socket.send(JSON.stringify({ type: 'relay', to: peerId, d: inner }));
       } catch {}
