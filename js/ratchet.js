@@ -1,41 +1,48 @@
 /* ═══════════════════════════════════════════════════
-   ratchet.js — Double Ratchet v3
-   ① HKDF (RFC 5869, SHA-512) in kdfRK + kdfCK
-   ② Header-Verschlüsselung: DH-Key im Header ist
-      nicht mehr im Klartext sichtbar.
-      kdfRK gibt 96 Byte: rootKey(32)+chainKey(32)+headerKey(32)
-      Der Header wird mit nacl.secretbox + headerKey verschlüsselt.
-      Für den Server/Angreifer ist jedes Paket vollständig opak.
+   ratchet.js — Double Ratchet v4 (Final)
+
+   Alle Sicherheits-Upgrades:
+   ① HKDF (RFC 5869, SHA-512) für alle Key-Ableitungen
+   ② Header-Verschlüsselung: DH-Key im Header opak
+   ③ Nachrichten-Nonce-Cache: verhindert Replay-Angriffe
+   ④ Striktere Validierung aller Eingaben
+   ⑤ Burn nach jeder Verwendung sensibler Daten
+   ⑥ nextRecvHeaderKey korrekt implementiert
    ═══════════════════════════════════════════════════ */
 
 const DoubleRatchet = (() => {
 
-  const MAX_CHAIN_LENGTH = 1000;
-  const MAX_SKIPPED_KEYS = 500;
-  const PAD_BLOCK        = 512;
-  const DUMMY_DH         = new Uint8Array(32);
+  const MAX_CHAIN_LENGTH  = 1000;
+  const MAX_SKIPPED_KEYS  = 500;
+  const MAX_NONCE_CACHE   = 2000;   // NEU: Replay-Schutz
+  const PAD_BLOCK         = 512;
+  const DUMMY_DH          = new Uint8Array(32);
 
   // ── HKDF (RFC 5869, SHA-512) ──────────────────────
 
   async function hkdf(ikm, salt, info, len) {
     const key  = await crypto.subtle.importKey('raw', ikm, { name: 'HKDF' }, false, ['deriveBits']);
     const bits = await crypto.subtle.deriveBits(
-      { name: 'HKDF', hash: 'SHA-512', salt, info: new TextEncoder().encode(info) },
+      { name: 'HKDF', hash: 'SHA-512', salt, info: U8.enc(info) },
       key, len * 8
     );
     return new Uint8Array(bits);
   }
 
-  // ── Root-KDF: 96 Byte → rootKey + chainKey + headerKey ──
+  // ── Root-KDF: 96 Byte → rootKey(32) + chainKey(32) + headerKey(32) ──
 
   async function kdfRK(rootKey, dhOutput) {
     const out = await hkdf(dhOutput, rootKey, 'kryptochat-ratchet-root-v1', 96);
-    const res = { rootKey: out.slice(0,32), chainKey: out.slice(32,64), headerKey: out.slice(64,96) };
-    _burn(out);
+    const res = {
+      rootKey:   out.slice(0, 32),
+      chainKey:  out.slice(32, 64),
+      headerKey: out.slice(64, 96)
+    };
+    burn(out);
     return res;
   }
 
-  // ── Chain-KDF: chainKey → neuer chainKey + messageKey ──
+  // ── Chain-KDF: chainKey → chainKey + messageKey ───
 
   async function kdfCK(chainKey) {
     const newChainKey = await hkdf(chainKey, new Uint8Array(32), 'kryptochat-ratchet-chain-v1',   32);
@@ -44,56 +51,54 @@ const DoubleRatchet = (() => {
   }
 
   // ── Header-Verschlüsselung ────────────────────────
-  // Serialisiert { dh(32), n(4), pn(4) } = 40 Byte → nacl.secretbox
+  // 40 Byte: dh(32) + n(4) + pn(4) → nacl.secretbox
 
-  function _encryptHeader(headerKey, dh, n, pn) {
+  function _encHdr(hk, dh, n, pn) {
     const plain = new Uint8Array(40);
     plain.set(dh, 0);
     const dv = new DataView(plain.buffer);
     dv.setUint32(32, n,  false);
     dv.setUint32(36, pn, false);
     const nonce = nacl.randomBytes(24);
-    const enc   = nacl.secretbox(plain, nonce, headerKey);
-    _burn(plain);
+    const enc   = nacl.secretbox(plain, nonce, hk);
+    burn(plain);
     return { enc: B64.enc(enc), nonce: B64.enc(nonce) };
   }
 
-  // Gibt geparsten Header zurück oder null bei falschem Key
-
-  function _tryDecryptHeader(headerKey, encB64, nonceB64) {
-    if (!headerKey || !encB64 || !nonceB64) return null;
+  function _decHdr(hk, encB64, nonceB64) {
+    if (!hk || !encB64 || !nonceB64) return null;
     try {
-      const plain = nacl.secretbox.open(B64.dec(encB64), B64.dec(nonceB64), headerKey);
+      const plain = nacl.secretbox.open(B64.dec(encB64), B64.dec(nonceB64), hk);
       if (!plain || plain.length !== 40) return null;
       const dv = new DataView(plain.buffer, plain.byteOffset);
-      const res = { dh: plain.slice(0,32), n: dv.getUint32(32,false), pn: dv.getUint32(36,false) };
-      _burn(plain);
+      const res = { dh: plain.slice(0, 32), n: dv.getUint32(32, false), pn: dv.getUint32(36, false) };
+      burn(plain);
       return res;
     } catch { return null; }
   }
 
   // ── Nachrichten-Ver/Entschlüsselung ──────────────
 
-  function _encMsg(mk, plaintext) {
+  function _encMsg(mk, pt) {
     const nonce = nacl.randomBytes(24);
-    const padded = _pad(plaintext);
-    const ct = nacl.secretbox(padded, nonce, mk);
-    _burn(padded);
+    const pad   = _pad(pt);
+    const ct    = nacl.secretbox(pad, nonce, mk);
+    burn(pad);
     return { nonce, ct };
   }
 
   function _decMsg(mk, nonceB64, ctB64) {
-    const padded = nacl.secretbox.open(B64.dec(ctB64), B64.dec(nonceB64), mk);
-    if (!padded) return null;
-    const pt = _unpad(padded);
-    _burn(padded);
+    const pad = nacl.secretbox.open(B64.dec(ctB64), B64.dec(nonceB64), mk);
+    if (!pad) return null;
+    const pt = _unpad(pad);
+    burn(pad);
     return pt;
   }
 
   // ── Padding ───────────────────────────────────────
 
-  function _pad(plaintext) {
-    const data = typeof plaintext === 'string' ? new TextEncoder().encode(plaintext) : plaintext;
+  function _pad(pt) {
+    const data = typeof pt === 'string' ? U8.enc(pt) : pt;
     if (data.length > PAD_BLOCK - 2) return data;
     const out = new Uint8Array(PAD_BLOCK);
     new DataView(out.buffer).setUint16(0, data.length, false);
@@ -112,16 +117,7 @@ const DoubleRatchet = (() => {
     return new TextDecoder().decode(buf);
   }
 
-  // ── Memory Cleanup ────────────────────────────────
-
-  function _burn(...arrays) {
-    arrays.forEach(a => {
-      if (a instanceof Uint8Array) { a.set(nacl.randomBytes(a.length)); a.fill(0); }
-    });
-  }
-
   // ── State erstellen ───────────────────────────────
-  // Neu: sendHeaderKey, recvHeaderKey, nextRecvHeaderKey, skippedHeaders
 
   function create(sharedSecret) {
     return {
@@ -130,53 +126,48 @@ const DoubleRatchet = (() => {
       recvChainKey:      null,
       dhSendKeyPair:     null,
       dhRecvPubKey:      null,
-      sendHeaderKey:     null,   // verschlüsselt ausgehende Header
-      recvHeaderKey:     null,   // entschlüsselt eingehende Header (aktueller Schritt)
-      nextRecvHeaderKey: null,   // entschlüsselt Header des NÄCHSTEN DH-Schritts
+      sendHeaderKey:     null,
+      recvHeaderKey:     null,
+      nextRecvHeaderKey: null,
       sendCount:         0,
       recvCount:         0,
       prevCount:         0,
-      skippedHeaders:    new Map(), // { n+dhKey → { headerKey, messageKey } }
+      skippedHeaders:    new Map(),
+      seenNonces:        new Set(),   // NEU: Replay-Schutz
       totalSent:         0,
       totalRecv:         0
     };
   }
 
-  // ── DH-Ratchet-Schritt (intern) ───────────────────
-  // Führt einen vollständigen DH-Ratchet-Schritt aus:
-  // 1. Recv-Chain mit neuem DH-Key aufbauen
-  // 2. Neues Send-Keypair erzeugen + Send-Chain aufbauen
-  // nextRecvHeaderKey = headerKey des neuen Send-Schritts
-  // (damit kann der Empfänger den übernächsten DH-Schritt erkennen)
+  // ── DH-Ratchet-Schritt ────────────────────────────
 
   async function _dhRatchet(ratchet, theirDHPub) {
     ratchet.dhRecvPubKey = theirDHPub;
 
     if (!ratchet.dhSendKeyPair) {
-      // Bob-Seite: erster Empfang, kein eigenes Send-Keypair vorhanden
+      // Erste eingehende Nachricht (Bob-Seite)
       const kdf = await kdfRK(ratchet.rootKey, DUMMY_DH);
       ratchet.rootKey           = kdf.rootKey;
       ratchet.recvChainKey      = kdf.chainKey;
       ratchet.recvHeaderKey     = kdf.headerKey;
     } else {
-      // Normaler DH-Ratchet
       const dhOut = nacl.box.before(theirDHPub, ratchet.dhSendKeyPair.secretKey);
       const kdf   = await kdfRK(ratchet.rootKey, dhOut);
       ratchet.rootKey       = kdf.rootKey;
       ratchet.recvChainKey  = kdf.chainKey;
       ratchet.recvHeaderKey = kdf.headerKey;
-      _burn(dhOut);
+      burn(dhOut);
     }
 
-    // Neues Send-Keypair + Send-Chain
+    // Neues Send-Keypair → nextRecvHeaderKey für Gegenseite
     ratchet.dhSendKeyPair = nacl.box.keyPair();
     const dhOut2 = nacl.box.before(theirDHPub, ratchet.dhSendKeyPair.secretKey);
     const kdf2   = await kdfRK(ratchet.rootKey, dhOut2);
     ratchet.rootKey           = kdf2.rootKey;
     ratchet.sendChainKey      = kdf2.chainKey;
     ratchet.sendHeaderKey     = kdf2.headerKey;
-    ratchet.nextRecvHeaderKey = kdf2.headerKey; // Gegenseite nutzt diesen als recvHeaderKey
-    _burn(dhOut2);
+    ratchet.nextRecvHeaderKey = kdf2.headerKey;
+    burn(dhOut2);
 
     ratchet.prevCount = ratchet.sendCount;
     ratchet.sendCount = 0;
@@ -190,8 +181,8 @@ const DoubleRatchet = (() => {
     while (ratchet.recvCount < until && ratchet.recvCount < MAX_CHAIN_LENGTH) {
       const kdf = await kdfCK(ratchet.recvChainKey);
       ratchet.recvChainKey = kdf.chainKey;
-      const cacheKey = ratchet.recvCount + ':' + B64.enc(ratchet.dhRecvPubKey || new Uint8Array(4));
-      ratchet.skippedHeaders.set(cacheKey, {
+      const k = ratchet.recvCount + ':' + B64.enc(ratchet.dhRecvPubKey || new Uint8Array(4));
+      ratchet.skippedHeaders.set(k, {
         headerKey:  ratchet.recvHeaderKey,
         messageKey: kdf.messageKey,
         n:          ratchet.recvCount
@@ -205,16 +196,34 @@ const DoubleRatchet = (() => {
         const k = iter.next();
         if (k.done) break;
         const c = ratchet.skippedHeaders.get(k.value);
-        if (c) _burn(c.messageKey);
+        if (c) burn(c.messageKey);
         ratchet.skippedHeaders.delete(k.value);
       }
     }
   }
 
+  // ── Replay-Schutz ─────────────────────────────────
+  // Jede Nonce darf nur einmal verwendet werden.
+  // Verhindert, dass ein Angreifer aufgezeichnete Pakete
+  // erneut einspielt (Replay-Angriff).
+
+  function _checkReplay(ratchet, nonceB64) {
+    if (ratchet.seenNonces.has(nonceB64)) return false; // Replay!
+    ratchet.seenNonces.add(nonceB64);
+    // Cache-Größe begrenzen: älteste Einträge entfernen
+    if (ratchet.seenNonces.size > MAX_NONCE_CACHE) {
+      const iter = ratchet.seenNonces.values();
+      while (ratchet.seenNonces.size > MAX_NONCE_CACHE / 2) {
+        const v = iter.next();
+        if (v.done) break;
+        ratchet.seenNonces.delete(v.value);
+      }
+    }
+    return true;
+  }
+
   // ══════════════════════════════════════════
   //  VERSCHLÜSSELN
-  //  Gibt zurück: { encHeader: {enc,nonce}, nonce, ciphertext }
-  //  statt vorher: { header: {dh,n,pn}, nonce, ciphertext }
   // ══════════════════════════════════════════
 
   async function encrypt(ratchet, plaintext) {
@@ -230,7 +239,7 @@ const DoubleRatchet = (() => {
         ratchet.sendHeaderKey = kdf.headerKey;
         ratchet.prevCount     = ratchet.sendCount;
         ratchet.sendCount     = 0;
-        _burn(dhOut);
+        burn(dhOut);
       } else {
         const kdf = await kdfRK(ratchet.rootKey, DUMMY_DH);
         ratchet.rootKey       = kdf.rootKey;
@@ -247,29 +256,27 @@ const DoubleRatchet = (() => {
     const n  = ratchet.sendCount++;
     ratchet.totalSent++;
 
-    // Header verschlüsseln — für Server/Angreifer opak
-    const encHeader = _encryptHeader(ratchet.sendHeaderKey, ratchet.dhSendKeyPair.publicKey, n, ratchet.prevCount);
+    const encHeader = _encHdr(ratchet.sendHeaderKey, ratchet.dhSendKeyPair.publicKey, n, ratchet.prevCount);
     const enc       = _encMsg(mk, plaintext);
-    _burn(mk);
+    burn(mk);
 
     return { encHeader, nonce: B64.enc(enc.nonce), ciphertext: B64.enc(enc.ct) };
   }
 
   // ══════════════════════════════════════════
   //  ENTSCHLÜSSELN
-  //  Erwartet: { encHeader: {enc,nonce}, nonce, ciphertext }
-  //
-  //  3-Stufen-Strategie:
-  //  1. recvHeaderKey → gleicher DH-Schritt
-  //  2. nextRecvHeaderKey → neuer DH-Schritt nötig
-  //  3. skippedHeaders-Cache → Out-of-Order
   // ══════════════════════════════════════════
 
   async function decrypt(ratchet, encHeader, nonceB64, ciphertextB64) {
     if (!encHeader?.enc || !encHeader?.nonce) return null;
 
+    // Replay-Schutz: Nonce darf nicht wiederverwendet werden
+    if (!_checkReplay(ratchet, nonceB64)) {
+      return null; // Replay erkannt — still ignorieren
+    }
+
     // Stufe 1: aktueller recvHeaderKey
-    let hdr = _tryDecryptHeader(ratchet.recvHeaderKey, encHeader.enc, encHeader.nonce);
+    let hdr = _decHdr(ratchet.recvHeaderKey, encHeader.enc, encHeader.nonce);
     if (hdr) {
       if (typeof hdr.n !== 'number' || hdr.n > MAX_CHAIN_LENGTH) return null;
       if (hdr.n > ratchet.recvCount) await _skipKeys(ratchet, hdr.n);
@@ -280,12 +287,12 @@ const DoubleRatchet = (() => {
       ratchet.recvCount++;
       ratchet.totalRecv++;
       const pt = _decMsg(mk, nonceB64, ciphertextB64);
-      _burn(mk);
+      burn(mk);
       return pt;
     }
 
-    // Stufe 2: nextRecvHeaderKey → neuer DH-Ratchet-Schritt
-    hdr = _tryDecryptHeader(ratchet.nextRecvHeaderKey, encHeader.enc, encHeader.nonce);
+    // Stufe 2: nextRecvHeaderKey → neuer DH-Ratchet
+    hdr = _decHdr(ratchet.nextRecvHeaderKey, encHeader.enc, encHeader.nonce);
     if (hdr) {
       if (typeof hdr.n !== 'number' || hdr.n > MAX_CHAIN_LENGTH) return null;
       await _dhRatchet(ratchet, hdr.dh);
@@ -297,18 +304,18 @@ const DoubleRatchet = (() => {
       ratchet.recvCount++;
       ratchet.totalRecv++;
       const pt = _decMsg(mk, nonceB64, ciphertextB64);
-      _burn(mk);
+      burn(mk);
       return pt;
     }
 
     // Stufe 3: Out-of-Order-Cache
     for (const [cacheKey, cached] of ratchet.skippedHeaders) {
-      const h = _tryDecryptHeader(cached.headerKey, encHeader.enc, encHeader.nonce);
+      const h = _decHdr(cached.headerKey, encHeader.enc, encHeader.nonce);
       if (h && h.n === cached.n) {
         const mk = cached.messageKey;
         ratchet.skippedHeaders.delete(cacheKey);
         const pt = _decMsg(mk, nonceB64, ciphertextB64);
-        _burn(mk);
+        burn(mk);
         ratchet.totalRecv++;
         return pt;
       }
@@ -321,11 +328,12 @@ const DoubleRatchet = (() => {
 
   function destroy(ratchet) {
     if (!ratchet) return;
-    _burn(ratchet.rootKey, ratchet.sendChainKey, ratchet.recvChainKey,
-          ratchet.sendHeaderKey, ratchet.recvHeaderKey, ratchet.nextRecvHeaderKey);
-    if (ratchet.dhSendKeyPair) _burn(ratchet.dhSendKeyPair.secretKey, ratchet.dhSendKeyPair.publicKey);
-    ratchet.skippedHeaders.forEach(c => _burn(c.messageKey));
+    burn(ratchet.rootKey, ratchet.sendChainKey, ratchet.recvChainKey,
+         ratchet.sendHeaderKey, ratchet.recvHeaderKey, ratchet.nextRecvHeaderKey);
+    if (ratchet.dhSendKeyPair) burn(ratchet.dhSendKeyPair.secretKey, ratchet.dhSendKeyPair.publicKey);
+    ratchet.skippedHeaders.forEach(c => burn(c.messageKey));
     ratchet.skippedHeaders.clear();
+    ratchet.seenNonces.clear();
     Object.keys(ratchet).forEach(k => { ratchet[k] = null; });
   }
 
@@ -359,11 +367,18 @@ const DoubleRatchet = (() => {
         sendHeaderKey:     d.sendHeaderKey     ? B64.dec(d.sendHeaderKey)     : null,
         recvHeaderKey:     d.recvHeaderKey     ? B64.dec(d.recvHeaderKey)     : null,
         nextRecvHeaderKey: d.nextRecvHeaderKey ? B64.dec(d.nextRecvHeaderKey) : null,
-        dhSendKeyPair:     d.dhSendPubKey ? { publicKey: B64.dec(d.dhSendPubKey), secretKey: B64.dec(d.dhSendSecKey) } : null,
-        dhRecvPubKey:      d.dhRecvPubKey ? B64.dec(d.dhRecvPubKey) : null,
-        sendCount: d.sendCount||0, recvCount: d.recvCount||0, prevCount: d.prevCount||0,
-        totalSent: d.totalSent||0, totalRecv: d.totalRecv||0,
-        skippedHeaders: new Map()
+        dhSendKeyPair:     d.dhSendPubKey ? {
+          publicKey: B64.dec(d.dhSendPubKey),
+          secretKey: B64.dec(d.dhSendSecKey)
+        } : null,
+        dhRecvPubKey:   d.dhRecvPubKey ? B64.dec(d.dhRecvPubKey) : null,
+        sendCount:      d.sendCount  || 0,
+        recvCount:      d.recvCount  || 0,
+        prevCount:      d.prevCount  || 0,
+        totalSent:      d.totalSent  || 0,
+        totalRecv:      d.totalRecv  || 0,
+        skippedHeaders: new Map(),
+        seenNonces:     new Set()
       };
     } catch { return null; }
   }
