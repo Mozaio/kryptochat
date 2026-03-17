@@ -75,7 +75,7 @@ function handleReq(req, res) {
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
     "script-src 'self' https://cdn.jsdelivr.net",
-    "style-src 'self' https://fonts.googleapis.com",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     "connect-src 'self' wss: ws:",
     "frame-ancestors 'none'",          // Kein iFrame-Embedding (Clickjacking)
