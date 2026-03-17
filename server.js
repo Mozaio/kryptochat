@@ -1,16 +1,18 @@
 /* ═══════════════════════════════════════════════════
-   server.js — Zero-Knowledge Relay
-   
-   Verbesserungen:
-   - Kennt den Sender nicht (Sealed Sender)
-   - Speichert keine Daten
-   - Keine Logs
+   server.js — Zero-Knowledge Relay v2
+
+   NEU: Opakes Relay-Envelope
+   - Verschlüsselte Nachrichten (enc/heartbeat) kommen als
+     base64-String in msg.d an — der Server sieht keinen type.
+   - Key-Exchange-Nachrichten (commit/key) kommen als Objekt an.
+   - In beiden Fällen: Server leitet weiter, liest Inhalt nicht.
+   - Kompatibel mit beiden Formaten (String + Objekt).
    ═══════════════════════════════════════════════════ */
 
-const https   = require('https');
-const crypto  = require('crypto');
-const fs      = require('fs');
-const path    = require('path');
+const https  = require('https');
+const crypto = require('crypto');
+const fs     = require('fs');
+const path   = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
@@ -44,8 +46,7 @@ function handleReq(req, res) {
   const url = req.url.split('?')[0];
   if (url === '/api/fingerprint') {
     const fp = tlsOpts
-      ? crypto.createHash('sha256').update(tlsOpts.cert).digest('hex')
-      : null;
+      ? crypto.createHash('sha256').update(tlsOpts.cert).digest('hex') : null;
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ fingerprint: fp }));
     return;
@@ -59,12 +60,12 @@ function handleReq(req, res) {
   });
 }
 
-const wss = new WebSocketServer({ server });
+const wss   = new WebSocketServer({ server });
 const rooms = new Map();
 
 // Rate Limiting
 const RATE_WINDOW = 10000;
-const RATE_MAX = 50;
+const RATE_MAX    = 50;
 function allowRate(ws) {
   const now = Date.now();
   if (!ws._rt) ws._rt = [];
@@ -107,7 +108,6 @@ wss.on('connection', (ws) => {
 
       if (!rooms.has(roomId)) rooms.set(roomId, new Map());
       const room = rooms.get(roomId);
-
       if (room.size >= 20) { ws.close(1013, 'Full'); return; }
 
       const peers = [];
@@ -123,28 +123,28 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    // ── RELAY (Sealed Sender: Server sieht Empfänger, aber nicht Sender) ──
+    // ── RELAY ──
+    // msg.d ist entweder:
+    //   - ein Objekt (Key-Exchange: commit/key) → wird als JSON weitergeleitet
+    //   - ein String (opakes Envelope: enc/heartbeat) → wird direkt weitergeleitet
+    // Der Server liest msg.d in beiden Fällen NICHT — er leitet nur weiter.
+    // Zero-Knowledge: Server kennt weder Sender noch Inhalt.
+
     if (msg.type === 'relay') {
-      if (!roomId || !msg.to || !msg.d) return;
+      if (!roomId || !msg.to || msg.d === undefined) return;
       const room = rooms.get(roomId);
       if (!room) return;
       const target = room.get(msg.to);
       if (!target || target.ws.readyState !== 1) return;
 
-      // Server leitet weiter — sieht nur:
-      //   - Ziel: anonyme ID
-      //   - Daten: verschlüsselte Payload (inkl. verschlüsselter Sender-ID)
-      // Server kann NICHT sehen, wer die Nachricht sendet.
-      target.ws.send(JSON.stringify({
-        t: 'msg',
-        d: msg.d
-      }));
+      // Weiterleitung: d unverändert übernehmen (Objekt oder String)
+      target.ws.send(JSON.stringify({ t: 'msg', d: msg.d }));
       return;
     }
 
     // ── BROADCAST ──
     if (msg.type === 'broadcast') {
-      if (!roomId || !msg.d) return;
+      if (!roomId || msg.d === undefined) return;
       const room = rooms.get(roomId);
       if (!room) return;
       room.forEach((c, id) => {
@@ -162,9 +162,7 @@ wss.on('connection', (ws) => {
     if (!room) return;
     room.delete(anonId);
     const leave = JSON.stringify({ t: 'leave', a: anonId });
-    room.forEach(c => {
-      if (c.ws.readyState === 1) c.ws.send(leave);
-    });
+    room.forEach(c => { if (c.ws.readyState === 1) c.ws.send(leave); });
     if (room.size === 0) rooms.delete(roomId);
   });
 });
