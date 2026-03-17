@@ -12,8 +12,8 @@
     document.body.innerHTML = '<p style="color:red;padding:2rem">TweetNaCl nicht geladen.</p>'; return;
   }
 
-  const myKeys    = Crypto.generateKeyPair();
-  const mySigning = Crypto.generateSigningKeyPair();
+  const myKeys    = KCrypto.generateKeyPair();
+  const mySigning = KCrypto.generateSigningKeyPair();
   const myAnonId  = makeAnonId();
   let socket = null, room = null, connected = false;
   const _seenCommits = new Set(); // Replay-Schutz für Key-Exchange-Commits
@@ -38,7 +38,7 @@
     Session.stopDummyTraffic();
     burn(myKeys.secretKey, myKeys.publicKey, mySigning.secretKey, mySigning.publicKey);
     Session.destroyAll();
-    Crypto.resetTranscript();
+    KCrypto.resetTranscript();
     const mc = $('mc'); if (mc) mc.innerHTML = '';
     socket = null; room = null; _seenCommits.clear();
   }
@@ -129,7 +129,7 @@
   function startKeyExchange(peerId) {
     let s = Session.getSession(peerId);
     if (!s) s = Session.createSession(peerId, null);
-    if (!s.myEphemeral) s.myEphemeral = Crypto.generateKeyPair();
+    if (!s.myEphemeral) s.myEphemeral = KCrypto.generateKeyPair();
 
     const ts       = Date.now();
     const commData = new Uint8Array(72);
@@ -137,7 +137,7 @@
     commData.set(s.myEphemeral.publicKey, 32);
     new DataView(commData.buffer).setBigUint64(64, BigInt(ts), false);
 
-    const { commitment, nonce: blindNonce } = Crypto.commit(commData);
+    const { commitment, nonce: blindNonce } = KCrypto.commit(commData);
     s.myCommitment      = commitment;
     s.myCommitNonce     = blindNonce;
     s.myCommitTimestamp = ts;
@@ -179,7 +179,7 @@
       timestamp:       s.myCommitTimestamp
     };
     const sigData = { from: payload.from, to: payload.to, pubKey: payload.pubKey, ephemeralPubKey: payload.ephemeralPubKey, commitNonce: payload.commitNonce, timestamp: payload.timestamp };
-    payload.signature = B64.enc(Crypto.sign(sigData, mySigning.secretKey));
+    payload.signature = B64.enc(KCrypto.sign(sigData, mySigning.secretKey));
     relayTo(peerId, { type: 'key', ...payload });
   }
 
@@ -189,7 +189,7 @@
     if (Math.abs(Date.now() - d.timestamp) > 30000) return;
 
     const sigData = { from: d.from, to: d.to, pubKey: d.pubKey, ephemeralPubKey: d.ephemeralPubKey, commitNonce: d.commitNonce, timestamp: d.timestamp };
-    if (!Crypto.verify(sigData, B64.dec(d.signature), B64.dec(d.signingPubKey))) {
+    if (!KCrypto.verify(sigData, B64.dec(d.signature), B64.dec(d.signingPubKey))) {
       UI.addSystem(`⚠ ${d.from.slice(0,8)}: Signatur ungültig — möglicher Angriff!`); return;
     }
 
@@ -199,7 +199,7 @@
       commData.set(B64.dec(d.pubKey), 0);
       commData.set(B64.dec(d.ephemeralPubKey), 32);
       new DataView(commData.buffer).setBigUint64(64, BigInt(s.theirCommitTimestamp), false);
-      if (!Crypto.verifyCommit(commData, B64.dec(d.commitNonce), s.theirCommitment)) {
+      if (!KCrypto.verifyCommit(commData, B64.dec(d.commitNonce), s.theirCommitment)) {
         UI.addSystem('🚨 Manipulationsversuch erkannt! Verbindung abgebrochen.');
         Session.removeSession(d.from); return;
       }
@@ -244,8 +244,8 @@
       if (Session.isDummy(pt)) return;
 
       // Transcript-Hash aktualisieren
-      Crypto.updateTranscript(pt);
-      UI.updateTranscript(Crypto.getTranscriptHash());
+      KCrypto.updateTranscript(pt);
+      UI.updateTranscript(KCrypto.getTranscriptHash());
 
       UI.addMessage(targetPeerId, pt, false);
     } catch {}
@@ -294,8 +294,8 @@
     }
 
     if (sent > 0) {
-      Crypto.updateTranscript(text);
-      UI.updateTranscript(Crypto.getTranscriptHash());
+      KCrypto.updateTranscript(text);
+      UI.updateTranscript(KCrypto.getTranscriptHash());
       UI.addMessage(myAnonId, text, true);
       $('min').value = ''; $('min').style.height = 'auto';
     }
