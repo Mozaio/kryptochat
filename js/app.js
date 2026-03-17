@@ -1,13 +1,9 @@
 /* ═══════════════════════════════════════════════════
    app.js — Kryptochat Hauptlogik
-   
-   Features:
-   - Double Ratchet (perfekte Forward Secrecy)
-   - Sealed Sender (Server kennt Sender nicht)
-   - Commitment Key Exchange (manipulationssicher)
-   - Obligatorische Fingerprint-Verifikation
-   - Zero-Knowledge Server
-   - Memory Cleanup bei Verlassen
+
+   Änderung: Session.encryptMessage und Session.decryptMessage
+   sind jetzt async (wegen HKDF in ratchet.js).
+   Alle Aufrufe wurden mit await versehen.
    ═══════════════════════════════════════════════════ */
 
 (() => {
@@ -40,34 +36,26 @@
   UI.log(`ID: ${myAnonId}`, 'ok');
 
   // ══════════════════════════════════════════
-  //  MEMORY CLEANUP — Bei Verlassen der Seite
+  //  MEMORY CLEANUP
   // ══════════════════════════════════════════
 
   function cleanup() {
-    // Eigene Keys verbrennen
     burn(myKeys.secretKey);
     burn(myKeys.publicKey);
     burn(mySigning.secretKey);
     burn(mySigning.publicKey);
-
-    // Alle Sessions + Ratchets zerstören
     Session.destroyAll();
-
-    // Sensible Variablen nullen
     socket = null;
     room = null;
   }
 
-  // Mehrere Event-Listener für verschiedene Browser
   window.addEventListener('beforeunload', cleanup);
   window.addEventListener('pagehide', cleanup);
   window.addEventListener('unload', cleanup);
 
-  // Auch bei Sichtbarkeitswechsel (Mobile)
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-      // Nicht komplett aufräumen, aber Secrets verbrennen
-      // (User könnte zurückkommen)
+      // Nicht komplett aufräumen — User könnte zurückkommen
     }
   });
 
@@ -95,7 +83,7 @@
 
   async function connect(r) {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${proto}//${location.host}`;
+    const url   = `${proto}//${location.host}`;
 
     try {
       socket = new WebSocket(url);
@@ -130,11 +118,9 @@
       $('est').style.color = 'var(--rd)';
       UI.addSystem('Verbindung verloren...');
 
-      // Sessions bereinigen
       Session.destroyAll();
       UI.updatePeers(Session.getAll());
 
-      // Auto-Reconnect
       setTimeout(() => {
         if (room && !connected) connect(room);
       }, 3000);
@@ -165,10 +151,10 @@
     if (msg.t === 'msg' && msg.d) {
       const d = msg.d;
       switch (d.type) {
-        case 'commit':    handleCommit(d);     break;
-        case 'key':       handleKey(d);        break;
-        case 'enc':       handleEncrypted(d);  break;
-        case 'heartbeat': handleHeartbeat(d);  break;
+        case 'commit':    handleCommit(d);    break;
+        case 'key':       handleKey(d);       break;
+        case 'enc':       handleEncrypted(d); break;
+        case 'heartbeat': handleHeartbeat(d); break;
       }
     }
 
@@ -181,7 +167,7 @@
   }
 
   // ══════════════════════════════════════════
-  //  KEY EXCHANGE — Commitment-basiert
+  //  KEY EXCHANGE
   // ══════════════════════════════════════════
 
   function startKeyExchange(peerAnonId) {
@@ -192,7 +178,7 @@
       session.myEphemeral = Crypto.generateKeyPair();
     }
 
-    const ts = Date.now();
+    const ts       = Date.now();
     const commData = new Uint8Array(72);
     commData.set(myKeys.publicKey, 0);
     commData.set(session.myEphemeral.publicKey, 32);
@@ -200,18 +186,17 @@
     view.setBigUint64(64, BigInt(ts), false);
 
     const comm = Crypto.commitment(commData);
-    session.myCommitment = comm;
+    session.myCommitment      = comm;
     session.myCommitTimestamp = ts;
 
     relayTo(peerAnonId, {
-      type: 'commit',
-      from: myAnonId,
-      comm: B64.enc(comm),
+      type:      'commit',
+      from:      myAnonId,
+      comm:      B64.enc(comm),
       timestamp: ts
     });
 
     UI.log(`Commit → ${peerAnonId.slice(0, 8)}`, 'ok');
-
     if (session.theirCommitment) sendKey(peerAnonId);
   }
 
@@ -220,7 +205,7 @@
     let session = Session.getSession(peerAnonId);
     if (!session) session = Session.createSession(peerAnonId, null);
 
-    session.theirCommitment = B64.dec(d.comm);
+    session.theirCommitment      = B64.dec(d.comm);
     session.theirCommitTimestamp = d.timestamp;
 
     UI.log(`Commit ← ${peerAnonId.slice(0, 8)}`, 'ok');
@@ -234,12 +219,12 @@
     session.keySent = true;
 
     const payload = {
-      from: myAnonId,
-      to: peerAnonId,
-      pubKey: B64.enc(myKeys.publicKey),
+      from:            myAnonId,
+      to:              peerAnonId,
+      pubKey:          B64.enc(myKeys.publicKey),
       ephemeralPubKey: B64.enc(session.myEphemeral.publicKey),
-      signingPubKey: B64.enc(mySigning.publicKey),
-      timestamp: Date.now()
+      signingPubKey:   B64.enc(mySigning.publicKey),
+      timestamp:       Date.now()
     };
 
     const sigData = {
@@ -263,7 +248,6 @@
       return;
     }
 
-    // Signatur prüfen
     const sigData = {
       from: d.from, to: d.to,
       pubKey: d.pubKey, ephemeralPubKey: d.ephemeralPubKey,
@@ -275,7 +259,6 @@
       return;
     }
 
-    // Commitment prüfen
     if (session.theirCommitment) {
       const commData = new Uint8Array(72);
       commData.set(B64.dec(d.pubKey), 0);
@@ -291,10 +274,9 @@
       UI.log(`Commitment ✓`, 'ok');
     }
 
-    session.theirPubKey = B64.dec(d.pubKey);
+    session.theirPubKey       = B64.dec(d.pubKey);
     session.theirEphemeralPub = B64.dec(d.ephemeralPubKey);
 
-    // Shared Secret → initialisiert Double Ratchet
     if (await Session.computeSharedSecret(peerAnonId)) {
       UI.log(`Ratchet ✓ ${peerAnonId.slice(0, 8)}`, 'ok');
       UI.addSystem(`${peerAnonId.slice(0, 8)} verbunden — verifiziere Fingerabdruck!`, true);
@@ -306,10 +288,10 @@
 
   // ══════════════════════════════════════════
   //  VERSCHLÜSSELTE NACHRICHTEN
+  //  Session.decryptMessage ist jetzt async → await
   // ══════════════════════════════════════════
 
-  function handleEncrypted(d) {
-    // Ziel-Session finden (über alle Sessions versuchen)
+  async function handleEncrypted(d) {
     let targetPeerId = null;
 
     // Versuch 1: Über Sealed Sender ID
@@ -324,13 +306,10 @@
       }
     }
 
-    // Versuch 2: Erste verfügbare Session mit Ratchet
+    // Versuch 2: Erste verfügbare Session
     if (!targetPeerId) {
       for (const [peerId, session] of Session.getAll()) {
-        if (session.ratchet) {
-          targetPeerId = peerId;
-          break;
-        }
+        if (session.ratchet) { targetPeerId = peerId; break; }
       }
     }
 
@@ -340,7 +319,8 @@
     }
 
     try {
-      const plaintext = Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
+      // ← await hier: decryptMessage ist jetzt async (HKDF)
+      const plaintext = await Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
       if (plaintext === null) {
         UI.log(`Decrypt fehlgeschlagen von ${targetPeerId.slice(0, 8)}`, 'no');
         return;
@@ -352,54 +332,43 @@
   }
 
   // ══════════════════════════════════════════
-  //  HEARTBEATS — NICHT als Nachricht anzeigen
+  //  HEARTBEATS
+  //  Session.decryptMessage ist jetzt async → await
   // ══════════════════════════════════════════
 
-  function handleHeartbeat(d) {
-    // Heartbeat NUR zum Keep-Alive, nicht als Nachricht anzeigen
-    // Wir entschlüsseln ihn trotzdem, um die Ratchet-State synchron zu halten
-
-    // Ziel-Session finden
+  async function handleHeartbeat(d) {
     let targetPeerId = null;
 
     if (d.si && d.sn) {
       for (const [peerId, session] of Session.getAll()) {
         if (!session.sealedKey || !session.established) continue;
         const senderId = Session.unsealSenderId(session.sealedKey, d.si, d.sn);
-        if (senderId === peerId) {
-          targetPeerId = peerId;
-          break;
-        }
+        if (senderId === peerId) { targetPeerId = peerId; break; }
       }
     }
 
     if (!targetPeerId) {
-      // Fallback: Erste Session mit Ratchet
       for (const [peerId, session] of Session.getAll()) {
-        if (session.ratchet) {
-          targetPeerId = peerId;
-          break;
-        }
+        if (session.ratchet) { targetPeerId = peerId; break; }
       }
     }
 
     if (!targetPeerId) return;
 
     try {
-      // NUR entschlüsseln (für Ratchet-Sync), aber NICHT anzeigen
-      const plaintext = Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
+      // ← await hier: decryptMessage ist jetzt async (HKDF)
+      const plaintext = await Session.decryptMessage(targetPeerId, d.h, d.n, d.c);
       if (plaintext !== null && plaintext.startsWith('hb:')) {
-        // Heartbeat erkannt → Session-Timestamp updaten
         Session.recordHeartbeat(targetPeerId);
-        return; // ← NICHT als Nachricht anzeigen
       }
-    } catch (e) {
-      // Still — Heartbeat-Fehler ignorieren
+    } catch {
+      // Heartbeat-Fehler still ignorieren
     }
   }
 
   // ══════════════════════════════════════════
   //  SENDEN
+  //  Session.encryptMessage ist jetzt async → await
   // ══════════════════════════════════════════
 
   $('sbtn').addEventListener('click', sendMessage);
@@ -431,9 +400,7 @@
 
     // Erzwungene Verifizierung
     const unverified = [];
-    sessions.forEach((s, id) => {
-      if (!s.verified) unverified.push(id);
-    });
+    sessions.forEach((s, id) => { if (!s.verified) unverified.push(id); });
     if (unverified.length > 0) {
       UI.addSystem(`🔒 VERIFIZIERUNG ERFORDERLICH — Klicke auf "⚠"`);
       return;
@@ -447,7 +414,8 @@
       }
 
       try {
-        const encrypted = Session.encryptMessage(peerId, text);
+        // ← await hier: encryptMessage ist jetzt async (HKDF)
+        const encrypted = await Session.encryptMessage(peerId, text);
         if (!encrypted) {
           UI.log(`Encrypt fehlgeschlagen für ${peerId.slice(0, 8)}`, 'no');
           continue;
@@ -459,11 +427,11 @@
 
         relayTo(peerId, {
           type: 'enc',
-          h: encrypted.header,
-          n: encrypted.nonce,
-          c: encrypted.ciphertext,
-          si: sealed.sealedId,
-          sn: sealed.sealedNonce
+          h:    encrypted.header,
+          n:    encrypted.nonce,
+          c:    encrypted.ciphertext,
+          si:   sealed.sealedId,
+          sn:   sealed.sealedNonce
         });
 
         sent++;
@@ -491,8 +459,8 @@
     if (!socket || socket.readyState !== 1) return;
     socket.send(JSON.stringify({
       type: 'relay',
-      to: peerAnonId,
-      d: data
+      to:   peerAnonId,
+      d:    data
     }));
   }
 
@@ -503,14 +471,14 @@
   $('pl').addEventListener('click', e => {
     const btn = e.target.closest('.bv');
     if (!btn) return;
-    const peerId = btn.dataset.p;
+    const peerId  = btn.dataset.p;
     const session = Session.getSession(peerId);
     if (!session || !session.theirPubKey) return;
     UI.showFingerprint(myKeys.publicKey, session.theirPubKey, peerId);
   });
 
   $('fpy').addEventListener('click', () => {
-    const peerId = $('fpm').dataset.peer;
+    const peerId  = $('fpm').dataset.peer;
     const session = Session.getSession(peerId);
     if (session) {
       session.verified = true;
@@ -518,12 +486,8 @@
       UI.updatePeers(Session.getAll());
 
       let allVerified = true;
-      Session.getAll().forEach(s => {
-        if (!s.verified) allVerified = false;
-      });
-      if (allVerified) {
-        UI.addSystem('🔓 Alle Peers verifiziert!', true);
-      }
+      Session.getAll().forEach(s => { if (!s.verified) allVerified = false; });
+      if (allVerified) UI.addSystem('🔓 Alle Peers verifiziert!', true);
     }
     UI.hideFingerprint();
   });
