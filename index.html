@@ -31,6 +31,7 @@
     <div class="ico">🔐</div>
     <h1>KRYPTOCHAT</h1>
     <p class="sub">Double Ratchet · Sealed Sender · Zero-Knowledge<br>Better than Signal — no phone number required</p>
+    <label for="rin" class="sr-only">Room name</label>
     <input type="text" id="rin" placeholder="Room name..." maxlength="64" autofocus autocomplete="off">
     <button class="btn" id="jbtn">CONNECT</button>
     <div class="st" id="jst"></div>
@@ -43,8 +44,8 @@
     <h3>Verify keys</h3>
     <p class="fp-sub">Compare the fingerprint with your partner — via a SECURE second channel.</p>
     <div class="fp-grid">
-      <div class="fp-b"><label>Your fingerprint</label><code id="mfp"></code></div>
-      <div class="fp-b"><label>Peer fingerprint</label><code id="pfp"></code></div>
+      <div class="fp-b"><label for="mfp">Your fingerprint</label><code id="mfp"></code></div>
+      <div class="fp-b"><label for="pfp">Peer fingerprint</label><code id="pfp"></code></div>
     </div>
     <div class="fp-a">
       <button class="y" id="fpy">VERIFIED</button>
@@ -90,6 +91,7 @@
     </div>
     <div class="sb-s">
       <h4>Messages</h4>
+      <label for="disappear-sel" class="sr-only">Message disappear timer</label>
       <select id="disappear-sel" style="width:100%;padding:4px 6px;border-radius:6px;border:1px solid var(--bo);background:var(--bg2);color:var(--t1);font-size:12px;cursor:pointer">
         <option value="0">Keep messages</option>
         <option value="30">After 30 seconds</option>
