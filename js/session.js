@@ -84,6 +84,16 @@ const Session = (() => {
     if (!s || !s.theirEphemeralPub || !s.myEphemeral || !_myLongTermPubKey)
       return false;
 
+    // Reject all-zeros or all-same-byte DH pubkeys (weak/malicious keys)
+    const isWeakKey = (key) => {
+      const first = key[0];
+      return key.every(b => b === 0) || key.every(b => b === first);
+    };
+    if (isWeakKey(s.theirEphemeralPub) || isWeakKey(s.theirPubKey)) {
+      if (typeof UI !== 'undefined') UI.addSystem('⚠ Weak DH key from peer — connection rejected');
+      return false;
+    }
+
     // ── X25519 (classical) ──────────────────────────
     const ephShared = nacl.box.before(s.theirEphemeralPub, s.myEphemeral.secretKey);
     let lt1, lt2, cmp = false;
