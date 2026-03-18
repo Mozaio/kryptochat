@@ -35,6 +35,7 @@ const UI = (() => {
     `;
     $('mc').appendChild(g);
     scrollToBottom();
+    return g;
   }
 
   function addSystem(text, highlight) {
@@ -82,6 +83,7 @@ const UI = (() => {
     if (labels[1]) labels[1].textContent = 'Session-Fingerprint (Peer-Seite)';
     $('fpm').dataset.peer = peerId;
     $('fpm').classList.add('v');
+    showFingerprintQR(fp);
   }
 
   function showFingerprint(myPubKey, peerPubKey, peerId) {
@@ -95,6 +97,28 @@ const UI = (() => {
   }
 
   function hideFingerprint() { $('fpm').classList.remove('v'); }
+
+  // QR-Code für Fingerabdruck — enkodiert als einfaches Text-Grid
+  // (kein externe Bibliothek nötig — visuell genug für Verifikation)
+  function showFingerprintQR(fp) {
+    const canvas = $('fp-qr');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const size = 200; canvas.width = size; canvas.height = size;
+    ctx.fillStyle = 'white'; ctx.fillRect(0, 0, size, size);
+    // Einfaches Encoding: Fingerabdruck-Bytes als Bitmuster
+    const bytes = fp.replace(/\s/g,'').match(/.{2}/g).map(h=>parseInt(h,16));
+    const cell  = Math.floor(size / bytes.length);
+    bytes.forEach((b, i) => {
+      // 8 Bits pro Byte → 8 Zeilen
+      for (let bit = 0; bit < 8; bit++) {
+        const on = (b >> bit) & 1;
+        ctx.fillStyle = on ? '#1a1a1a' : '#ffffff';
+        ctx.fillRect(i * cell, bit * Math.floor(size/8), cell, Math.floor(size/8));
+      }
+    });
+    canvas.style.display = 'block';
+  }
 
   function showRoom(roomName) {
     $('ov').classList.add('h'); $('app').classList.add('v');
