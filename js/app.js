@@ -54,7 +54,7 @@
   async function joinRoom() {
     const r = $('rin').value.trim();
     if (!r) { $('rin').focus(); return; }
-    UI.setJoinStatus('Verbinde...');
+    UI.setJoinStatus('Connecting...');
     UI.setJoinDisabled(true);
     room = r; await connect(r);
   }
@@ -80,15 +80,15 @@
       connected = false;
       Session.stopDummyTraffic();
       socket = null;
-      $('est').textContent = 'Getrennt'; $('est').style.color = 'var(--rd)';
-      UI.addSystem('Verbindung verloren — reconnecte...');
-      // Sessions NICHT zerstören bei Reconnect — Ratchet-State bleibt erhalten.
-      // Wenn der Peer sich wieder verbindet, läuft der Key-Exchange neu und der
-      // bestehende Ratchet wird durch einen neuen ersetzt. Das ist sicher.
+      $('est').textContent = 'Disconnected'; $('est').style.color = 'var(--rd)';
+      UI.addSystem('Connection lost — reconnecting...');
+      // Do NOT destroy sessions on reconnect — ratchet state is preserved.
+      // When the peer reconnects, the key exchange runs again and the
+      // existing ratchet is replaced by a new one. This is safe.
       UI.updatePeers(Session.getAll());
       setTimeout(() => { if (room && !connected) connect(room); }, 3000);
     };
-    socket.onerror = () => { UI.log('Relay Fehler', 'no'); UI.setJoinStatus('Fehler!'); UI.setJoinDisabled(false); };
+    socket.onerror = () => { UI.log('Relay error', 'no'); UI.setJoinStatus('Error!'); UI.setJoinDisabled(false); };
   }
 
   // ── Relay ─────────────────────────────────────────
@@ -122,7 +122,7 @@
     if (msg.t === 'leave') {
       Session.removeSession(msg.a);
       UI.updatePeers(Session.getAll());
-      UI.addSystem(`${msg.a.slice(0,8)} hat verlassen`);
+      UI.addSystem(`${msg.a.slice(0,8)} has left`);
     }
   }
 
@@ -191,7 +191,7 @@
 
     const sigData = { from: d.from, to: d.to, pubKey: d.pubKey, ephemeralPubKey: d.ephemeralPubKey, commitNonce: d.commitNonce, timestamp: d.timestamp };
     if (!KCrypto.verify(sigData, B64.dec(d.signature), B64.dec(d.signingPubKey))) {
-      UI.addSystem(`⚠ ${d.from.slice(0,8)}: Signatur ungültig — möglicher Angriff!`); return;
+      UI.addSystem(`⚠ ${d.from.slice(0,8)}: invalid signature — possible attack!`); return;
     }
 
     // Commitment mit Blinding-Nonce prüfen
@@ -201,7 +201,7 @@
       commData.set(B64.dec(d.ephemeralPubKey), 32);
       new DataView(commData.buffer).setBigUint64(64, BigInt(s.theirCommitTimestamp), false);
       if (!KCrypto.verifyCommit(commData, B64.dec(d.commitNonce), s.theirCommitment)) {
-        UI.addSystem('🚨 Manipulationsversuch erkannt! Verbindung abgebrochen.');
+        UI.addSystem('🚨 Tampering attempt detected! Connection aborted.');
         Session.removeSession(d.from); return;
       }
     }
@@ -210,7 +210,7 @@
     s.theirEphemeralPub = B64.dec(d.ephemeralPubKey);
 
     if (await Session.computeSharedSecret(d.from)) {
-      UI.addSystem(`${d.from.slice(0,8)} verbunden — verifiziere Fingerabdruck für maximale Sicherheit`, true);
+      UI.addSystem(`${d.from.slice(0,8)} connected — verify fingerprint for maximum security`, true);
       // Dummy-Traffic starten
       if (Session.getAll().size >= 1) Session.startDummyTraffic();
     }
@@ -270,8 +270,8 @@
     disappearSel.addEventListener('change', () => {
       _disappearAfter = parseInt(disappearSel.value) * 1000;
       const label = _disappearAfter > 0
-        ? `Nachrichten verschwinden nach ${disappearSel.value}s`
-        : 'Nachrichten verschwinden: aus';
+        ? `Messages disappear after ${disappearSel.value}s`
+        : 'Message disappearing: off';
       UI.addSystem(label);
     });
   }
@@ -288,20 +288,20 @@
   async function sendMessage() {
     const text = $('min').value.trim();
     if (!text) return;
-    if (!socket || socket.readyState !== 1) { UI.addSystem('Relay nicht bereit'); return; }
+    if (!socket || socket.readyState !== 1) { UI.addSystem('Relay not ready'); return; }
 
     const sessions = Session.getAll();
-    if (sessions.size === 0) { UI.addSystem('Kein Peer verbunden'); return; }
+    if (sessions.size === 0) { UI.addSystem('No peer connected'); return; }
 
     // Blockiert nur wenn kein Ratchet — nicht bei fehlender Verifikation
     let hasNoRatchet = false;
     sessions.forEach(s => { if (!s.established) hasNoRatchet = true; });
-    if (hasNoRatchet) { UI.addSystem('Warte auf Key-Exchange...'); return; }
+    if (hasNoRatchet) { UI.addSystem('Waiting for key exchange...'); return; }
 
     // Optionale Warnung bei nicht verifizierten Peers
     let anyUnverified = false;
     sessions.forEach(s => { if (!s.verified) anyUnverified = true; });
-    if (anyUnverified) UI.addSystem('⚠ Fingerabdruck nicht geprüft — klicke ⚠ in der Sidebar');
+    if (anyUnverified) UI.addSystem('⚠ Fingerprint not verified — click ⚠ in the sidebar');
 
     let sent = 0;
     for (const [peerId, s] of sessions) {
@@ -346,11 +346,11 @@
       UI.updatePeers(Session.getAll());
       let allOk = true;
       Session.getAll().forEach(s => { if (!s.verified) allOk = false; });
-      if (allOk) UI.addSystem('🔓 Alle Peers verifiziert — maximale Sicherheit!', true);
+      if (allOk) UI.addSystem('🔓 All peers verified — maximum security!', true);
     }
     UI.hideFingerprint();
   });
   $('fpn').addEventListener('click', () => UI.hideFingerprint());
 
-  UI.log('Bereit', 'ok');
+  UI.log('Ready', 'ok');
 })();
