@@ -248,7 +248,8 @@
       KCrypto.updateTranscript(pt);
       UI.updateTranscript(KCrypto.getTranscriptHash());
 
-      UI.addMessage(targetPeerId, pt, false);
+      const recvEl = UI.addMessage(targetPeerId, pt, false);
+      if (_disappearAfter > 0 && recvEl) scheduleDelete(recvEl);
     } catch {}
   }
 
