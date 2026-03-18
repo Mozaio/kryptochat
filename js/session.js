@@ -51,7 +51,7 @@ const Session = (() => {
     s.sealedKey = nacl.hash(si).slice(0, 32);
     burn(si);
 
-    // isAlice: wer den kleineren Long-Term-Key hat (deterministisch, beide Seiten gleich)
+    // isAlice: whoever has the smaller long-term key (deterministic, same on both sides)
     let isAlice = false;
     if (_myLongTermPubKey && s.theirPubKey) {
       for (let i = 0; i < 32; i++) {
@@ -59,7 +59,7 @@ const Session = (() => {
         if (_myLongTermPubKey[i] > s.theirPubKey[i]) { isAlice = false; break; }
       }
     }
-    // Header-Keys deterministisch aus sharedSecret ableiten
+    // Derive header keys deterministically from sharedSecret
     await DoubleRatchet.initHeaderKeys(s.ratchet, s.sharedSecret, isAlice);
     s.isAlice = isAlice;
     return true;
@@ -83,7 +83,7 @@ const Session = (() => {
       const h = new Uint8Array(buf);
       s.sharedSecret = h.slice(0, 32);
       s.established  = true;
-      initRatchet(id); // async, fire-and-forget — Header-Keys gesetzt bevor erste Msg
+      initRatchet(id); // async, fire-and-forget — header keys set before first message
       burn(combined, ephShared, h);
       return true;
     });
@@ -99,7 +99,7 @@ const Session = (() => {
     const s = sessions.get(id);
     if (!s || !s.ratchet) return null;
     s.msgCount = (s.msgCount || 0) + 1;
-    if (s.msgCount === 900) UI.addSystem('⚠ Session nähert sich Limit — neue Session empfohlen');
+    if (s.msgCount === 900) UI.addSystem('⚠ Session approaching limit — new session recommended');
     return await DoubleRatchet.encrypt(s.ratchet, plaintext);
   }
 
@@ -144,7 +144,7 @@ const Session = (() => {
   function startDummyTraffic() {
     stopDummyTraffic();
     function schedule() {
-      // 4–20 Sekunden — kryptographisch zufällig
+      // 4–20 seconds — cryptographically random
       const r = nacl.randomBytes(4);
       const delay = 4000 + (new DataView(r.buffer).getUint32(0, false) / 0xFFFFFFFF) * 16000;
       _dummyTimer = setTimeout(async () => { await _sendDummy(); schedule(); }, delay);
