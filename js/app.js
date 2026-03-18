@@ -24,6 +24,44 @@
   UI.initLogToggle();
   UI.log(`ID: ${myAnonId}`, 'ok');
 
+  // ── ML-KEM-768 API Normalization ──────────────────
+  // Normalizes @noble/post-quantum export shapes into a unified API.
+  // window.nobleKyber is set by the ESM <script type=module> in index.html.
+  function _initMlkem() {
+    const lib = window.nobleKyber;
+    if (!lib) return null;
+    const k = lib.kyber768 || lib.ml_kem768 || lib.mlkem768;
+    if (!k) return null;
+    return {
+      generateKeyPair() {
+        const r = k.keygen ? k.keygen() : k.generateKeyPair();
+        return { publicKey: r.publicKey || r.pk, secretKey: r.secretKey || r.sk };
+      },
+      encapsulate(pk) {
+        const r = k.encapsulate(pk);
+        return {
+          cipherText:   r.cipherText   || r.ciphertext   || r.ct,
+          ciphertext:   r.cipherText   || r.ciphertext   || r.ct,
+          sharedSecret: r.sharedSecret || r.sharedKey    || r.ss
+        };
+      },
+      decapsulate(ct, sk) {
+        const r = k.decapsulate(ct, sk);
+        return { sharedSecret: r.sharedSecret || r.sharedKey || r.ss || r };
+      }
+    };
+  }
+  // Try immediately, then retry once after 800ms for slow ESM loads
+  window._mlkem = _initMlkem();
+  if (!window._mlkem) {
+    setTimeout(() => {
+      window._mlkem = _initMlkem();
+      UI.log(window._mlkem ? 'ML-KEM-768 loaded ✓' : 'ML-KEM-768 not available — classical only', window._mlkem ? 'ok' : 'wr');
+    }, 800);
+  } else {
+    UI.log('ML-KEM-768 loaded ✓', 'ok');
+  }
+
   // ── Screenshot-Schutz (korrekt) ──────────────────
   // Tab versteckt → DOM leeren. Tab sichtbar → nichts überschreiben.
   // Nachrichten die ankamen während Tab versteckt war, werden
@@ -116,6 +154,7 @@
       switch (d.type) {
         case 'commit': handleCommit(d); break;
         case 'key':    handleKey(d);    break;
+        case 'kem':    handleKem(d);    break;
         case 'enc':    handleEncrypted(d); break;
       }
     }
@@ -129,8 +168,18 @@
   // ── Key Exchange mit Commitment + Blinding ─────────
   function startKeyExchange(peerId) {
     let s = Session.getSession(peerId);
-    if (!s) s = Session.createSession(peerId, null);
+    if (!s) {
+      s = Session.createSession(peerId, null);
+    } else {
+      // Reset keySent so we can re-exchange keys after reconnect
+      s.keySent = false;
+      s.myEphemeral = null; // force new ephemeral keypair
+    }
     if (!s.myEphemeral) s.myEphemeral = KCrypto.generateKeyPair();
+    // Generate ML-KEM keypair lazily (library may not have been ready at createSession time)
+    if (!s.mlkemKeyPair && window._mlkem) {
+      try { s.mlkemKeyPair = window._mlkem.generateKeyPair(); } catch {}
+    }
 
     const ts       = Date.now();
     const commData = new Uint8Array(72);
@@ -177,7 +226,9 @@
       ephemeralPubKey: B64.enc(s.myEphemeral.publicKey),
       signingPubKey:   B64.enc(mySigning.publicKey),
       commitNonce:     B64.enc(s.myCommitNonce),
-      timestamp:       s.myCommitTimestamp
+      timestamp:       s.myCommitTimestamp,
+      // ML-KEM-768 public key (post-quantum)
+      mlkemPubKey: s.mlkemKeyPair ? B64.enc(s.mlkemKeyPair.publicKey) : null
     };
     const sigData = { from: payload.from, to: payload.to, pubKey: payload.pubKey, ephemeralPubKey: payload.ephemeralPubKey, commitNonce: payload.commitNonce, timestamp: payload.timestamp };
     payload.signature = B64.enc(KCrypto.sign(sigData, mySigning.secretKey));
@@ -209,14 +260,80 @@
     s.theirPubKey       = B64.dec(d.pubKey);
     s.theirEphemeralPub = B64.dec(d.ephemeralPubKey);
 
-    if (await Session.computeSharedSecret(d.from)) {
-      UI.addSystem(`${d.from.slice(0,8)} connected — verify fingerprint for maximum security`, true);
-      // Dummy-Traffic starten
-      if (Session.getAll().size >= 1) Session.startDummyTraffic();
+    // ── ML-KEM-768 Post-Quantum Hybrid ──────────────
+    // isAlice (smaller LT key) encapsulates and sends KEM ciphertext.
+    // Bob decapsulates when he receives it.
+    if (d.mlkemPubKey) {
+      s.theirMlkemPub = B64.dec(d.mlkemPubKey);
+      // Determine isAlice (same logic as session.js)
+      let isAlice = false;
+      for (let i = 0; i < 32; i++) {
+        if (myKeys.publicKey[i] < s.theirPubKey[i]) { isAlice = true;  break; }
+        if (myKeys.publicKey[i] > s.theirPubKey[i]) { isAlice = false; break; }
+      }
+      if (isAlice && window._mlkem) {
+        // Alice: encapsulate with Bob's ML-KEM pub key
+        try {
+          // Note: { cipherText } or { ciphertext } depending on library version
+          const kemResult = window._mlkem.encapsulate(s.theirMlkemPub);
+          const kemCT = kemResult.cipherText || kemResult.ciphertext;
+          const kemSS = kemResult.sharedSecret;
+          s.kemSecret     = new Uint8Array(kemSS); // copy — do NOT burn original yet
+          s.kemCiphertext = kemCT;
+          // Send KEM ciphertext to Bob
+          relayTo(d.from, { type: 'kem', from: myAnonId, ct: B64.enc(kemCT) });
+        } catch (e) { UI.log('ML-KEM encap error: ' + e.message, 'wr'); }
+      }
     }
+
+    // isAlice check for timing: Alice encapsulates KEM and already has kemSecret,
+    // so she can compute sharedSecret immediately.
+    // Bob has NOT received the KEM ciphertext yet — his kemSecret is still null.
+    // Bob will call computeSharedSecret from handleKem after decapsulation.
+    const isAliceForKem = d.mlkemPubKey && s.kemSecret; // Alice: has kemSecret
+    // noKem = PQ not available, OR Bob has no keypair (keygen failed)
+    const noKem = !d.mlkemPubKey || !window._mlkem || (!s.kemSecret && !s.mlkemKeyPair);
+
+    if (isAliceForKem || noKem) {
+      // Alice or no-PQ: compute immediately
+      if (await Session.computeSharedSecret(d.from)) {
+        const pqLabel = s.kemSecret ? ' + ML-KEM-768 ✓' : '';
+        UI.addSystem(`${d.from.slice(0,8)} connected${pqLabel} — verify fingerprint`, true);
+        if (Session.getAll().size >= 1) Session.startDummyTraffic();
+      }
+    }
+    // Bob with PQ: waits for handleKem to call computeSharedSecret
 
     if (!s.keySent) sendKey(d.from);
     UI.updatePeers(Session.getAll());
+  }
+
+  // ── KEM Ciphertext Handler (Post-Quantum) ───────────
+  async function handleKem(d) {
+    const s = Session.getSession(d.from);
+    if (!s || !s.mlkemKeyPair || !d.ct) return;
+    // Bob: decapsulate KEM ciphertext from Alice
+    try {
+      if (window._mlkem) {
+        const ct = B64.dec(d.ct);
+        const decapResult = window._mlkem.decapsulate(ct, s.mlkemKeyPair.secretKey);
+        const kemSS = decapResult.sharedSecret;
+        if (!kemSS) { UI.log('ML-KEM decap: no sharedSecret', 'wr'); return; }
+        s.kemSecret = new Uint8Array(kemSS);
+        UI.log('ML-KEM-768 decapsulated ✓', 'ok');
+        // Bob now has kemSecret — compute the real sharedSecret
+        if (!s.established) {
+          // Normal path: compute for first time with real kemSecret
+          if (await Session.computeSharedSecret(d.from)) {
+            UI.addSystem(`${d.from.slice(0,8)} connected + ML-KEM-768 ✓ — verify fingerprint`, true);
+            if (Session.getAll().size >= 1) Session.startDummyTraffic();
+          }
+        } else {
+          // Already established (shouldn't happen in normal flow, but handle gracefully)
+          await Session.recomputeWithKem(d.from);
+        }
+      }
+    } catch (e) { UI.log('ML-KEM decap error: ' + e.message, 'wr'); }
   }
 
   // ── Encrypted Messages ────────────────────────────
