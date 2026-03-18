@@ -51,15 +51,26 @@
       }
     };
   }
-  // Try immediately, then retry once after 800ms for slow ESM loads
+  // ML-KEM loads asynchronously via ESM — retry with backoff until available
   window._mlkem = _initMlkem();
-  if (!window._mlkem) {
-    setTimeout(() => {
-      window._mlkem = _initMlkem();
-      UI.log(window._mlkem ? 'ML-KEM-768 loaded ✓' : 'ML-KEM-768 not available — classical only', window._mlkem ? 'ok' : 'wr');
-    }, 800);
-  } else {
+  if (window._mlkem) {
     UI.log('ML-KEM-768 loaded ✓', 'ok');
+  } else {
+    // Retry at 500ms, 1.5s, 3s, 5s — silently until last attempt
+    const _mlkemRetries = [500, 1500, 3000, 5000];
+    let _mlkemAttempt = 0;
+    function _tryMlkem() {
+      window._mlkem = _initMlkem();
+      _mlkemAttempt++;
+      if (window._mlkem) {
+        UI.log('ML-KEM-768 loaded ✓', 'ok');
+      } else if (_mlkemAttempt < _mlkemRetries.length) {
+        setTimeout(_tryMlkem, _mlkemRetries[_mlkemAttempt]);
+      } else {
+        UI.log('ML-KEM-768 not available — classical crypto only', 'wr');
+      }
+    }
+    setTimeout(_tryMlkem, _mlkemRetries[0]);
   }
 
   // ── Screenshot-Schutz (korrekt) ──────────────────
