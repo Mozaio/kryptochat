@@ -10,11 +10,12 @@
 <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js" crossorigin="anonymous"></script>
 <script type="module">
   try {
-    const pq = await import('https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.2.0/kyber.js');
+    // @noble/post-quantum v0.5.4 — exports ml_kem768 from /ml-kem.js
+    const pq = await import('https://esm.sh/@noble/post-quantum@0.5.4/ml-kem.js');
     window.nobleKyber = pq;
   } catch(e) {
     try {
-      const pq = await import('https://esm.sh/@noble/post-quantum@0.2.0/kyber.js');
+      const pq = await import('https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.4/+esm');
       window.nobleKyber = pq;
     } catch(e2) {
       console.warn('ML-KEM library not loaded — classical crypto only');
