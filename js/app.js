@@ -238,6 +238,8 @@
   async function handleKey(d) {
     const s = Session.getSession(d.from);
     if (!s) return;
+    // Validate d.to — this message must be addressed to us
+    if (d.to !== myAnonId) return;
     if (Math.abs(Date.now() - d.timestamp) > 30000) return;
 
     const sigData = { from: d.from, to: d.to, pubKey: d.pubKey, ephemeralPubKey: d.ephemeralPubKey, commitNonce: d.commitNonce, timestamp: d.timestamp };
@@ -427,7 +429,7 @@
         const enc = await Session.encryptMessage(peerId, text);
         if (!enc) continue;
         const sealed = Session.sealSenderId(s.sealedKey, myAnonId);
-        await jitter(10, 80);
+        await jitter(50, 200); // randomize send timing to reduce correlation with dummy traffic
         // enc.encHeader = verschlüsselter Header (v7), enc.header = Klartext (v6 fallback)
         relayEncrypted(peerId, { type: 'enc', eh: enc.encHeader, h: enc.header, n: enc.nonce, c: enc.ciphertext, si: sealed.sealedId, sn: sealed.sealedNonce });
         sent++;
