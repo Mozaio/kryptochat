@@ -7,7 +7,7 @@ const UI = (() => {
     const el = $('log'); if (!el) return;
     const d = document.createElement('div');
     d.className = cls || '';
-    d.textContent = `[${new Date().toLocaleTimeString('de-DE')}] ${msg}`;
+    d.textContent = `[${new Date().toLocaleTimeString('en-GB')}] ${msg}`;
     el.appendChild(d); el.scrollTop = el.scrollHeight;
   }
 
@@ -27,7 +27,7 @@ const UI = (() => {
     const es = $('es'); if (es) es.remove();
     const g = document.createElement('div');
     g.className = `mg ${isOutgoing ? 'out' : 'in'}`;
-    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    const t = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     g.innerHTML = `
       ${!isOutgoing ? `<div class="ms">${esc(shortId(senderId))}</div>` : ''}
       <div class="mb">${esc(text)}</div>
@@ -55,13 +55,13 @@ const UI = (() => {
   function updatePeers(sessionsMap) {
     const pl = $('pl'); if (!pl) return;
     if (sessionsMap.size === 0) {
-      pl.innerHTML = '<li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li>';
+      pl.innerHTML = '<li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Waiting...</li>';
       $('onc').textContent = '1';
-      $('est').textContent = 'Getrennt'; $('est').style.color = 'var(--am)';
+      $('est').textContent = 'Disconnected'; $('est').style.color = 'var(--am)';
       return;
     }
     $('onc').textContent = sessionsMap.size + 1;
-    $('est').textContent = `${sessionsMap.size} Peer${sessionsMap.size > 1 ? 's' : ''}`;
+    $('est').textContent = `${sessionsMap.size} peer${sessionsMap.size > 1 ? 's' : ''}`;
     $('est').style.color = 'var(--gn)';
     pl.innerHTML = '';
     sessionsMap.forEach((s, id) => {
@@ -79,8 +79,8 @@ const UI = (() => {
     $('mfp').textContent = fp;
     $('pfp').textContent = fp;
     const labels = document.querySelectorAll('.fp-b label');
-    if (labels[0]) labels[0].textContent = 'Session-Fingerprint (deine Seite)';
-    if (labels[1]) labels[1].textContent = 'Session-Fingerprint (Peer-Seite)';
+    if (labels[0]) labels[0].textContent = 'Session fingerprint (your side)';
+    if (labels[1]) labels[1].textContent = 'Session fingerprint (peer side)';
     $('fpm').dataset.peer = peerId;
     $('fpm').classList.add('v');
     showFingerprintQR(fp);
@@ -90,8 +90,8 @@ const UI = (() => {
     $('mfp').textContent = KCrypto.fingerprintKey(myPubKey);
     $('pfp').textContent = KCrypto.fingerprintKey(peerPubKey);
     const labels = document.querySelectorAll('.fp-b label');
-    if (labels[0]) labels[0].textContent = 'Dein Fingerabdruck';
-    if (labels[1]) labels[1].textContent = 'Peer Fingerabdruck';
+    if (labels[0]) labels[0].textContent = 'Your fingerprint';
+    if (labels[1]) labels[1].textContent = 'Peer fingerprint';
     $('fpm').dataset.peer = peerId;
     $('fpm').classList.add('v');
   }
@@ -125,7 +125,7 @@ const UI = (() => {
     $('drm').textContent = roomName; $('ct').textContent = '#' + roomName;
     $('min').disabled = false; $('sbtn').disabled = false;
     $('min').focus();
-    $('est').textContent = 'Verbunden'; $('est').style.color = 'var(--gn)';
+    $('est').textContent = 'Connected'; $('est').style.color = 'var(--gn)';
   }
 
   function setJoinStatus(text)     { const el = $('jst'); if (el) el.textContent = text; }
