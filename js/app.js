@@ -16,6 +16,7 @@
   const mySigning = KCrypto.generateSigningKeyPair();
   const myAnonId  = makeAnonId();
   let socket = null, room = null, connected = false;
+  let _disappearAfter = 0; // 0 = aus, sonst Millisekunden
   const _seenCommits = new Set(); // Replay-Schutz für Key-Exchange-Commits
 
   Session.setMyLongTermKey(myKeys.publicKey);
@@ -252,6 +253,28 @@
   }
 
   // ── Senden ───────────────────────────────────────
+  // ── Disappearing Messages ────────────────────────
+  function scheduleDelete(el) {
+    if (!el || _disappearAfter <= 0) return;
+    setTimeout(() => {
+      el.style.transition = 'opacity 0.5s';
+      el.style.opacity = '0';
+      setTimeout(() => el.remove(), 500);
+    }, _disappearAfter);
+  }
+
+  // Disappear-Toggle in UI (falls vorhanden)
+  const disappearSel = $('disappear-sel');
+  if (disappearSel) {
+    disappearSel.addEventListener('change', () => {
+      _disappearAfter = parseInt(disappearSel.value) * 1000;
+      const label = _disappearAfter > 0
+        ? `Nachrichten verschwinden nach ${disappearSel.value}s`
+        : 'Nachrichten verschwinden: aus';
+      UI.addSystem(label);
+    });
+  }
+
   $('sbtn').addEventListener('click', sendMessage);
   $('min').addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -296,7 +319,8 @@
     if (sent > 0) {
       KCrypto.updateTranscript(text);
       UI.updateTranscript(KCrypto.getTranscriptHash());
-      UI.addMessage(myAnonId, text, true);
+      const sentEl = UI.addMessage(myAnonId, text, true);
+      if (_disappearAfter > 0 && sentEl) scheduleDelete(sentEl);
       $('min').value = ''; $('min').style.height = 'auto';
     }
   }
