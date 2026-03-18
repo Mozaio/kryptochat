@@ -19,7 +19,10 @@ if (fs.existsSync(TLS_KEY) && fs.existsSync(TLS_CERT)) {
   tlsOpts = { key: fs.readFileSync(TLS_KEY), cert: fs.readFileSync(TLS_CERT) };
 }
 
-const ROOM_SALT = crypto.createHash('sha256').update('kc-v5-salt').digest();
+// Dynamischer Room-Salt: zufällig bei jedem Serverstart generiert.
+// Verhindert Rainbow-Table-Angriffe auf Raumnamen.
+// Salt wird NICHT gespeichert — nach Neustart sind alle Räume neu.
+const ROOM_SALT = crypto.randomBytes(32);
 function hashRoom(name) { return crypto.createHmac('sha256', ROOM_SALT).update(name).digest('hex'); }
 
 const MIME = {
@@ -28,9 +31,22 @@ const MIME = {
   '.png':  'image/png',                '.svg': 'image/svg+xml'
 };
 
+// TLS-Pflicht: ohne Zertifikat wird gewarnt und nur auf localhost gestartet.
+// Für Produktion: key.pem + cert.pem müssen vorhanden sein.
+if (!tlsOpts) {
+  process.stderr.write(
+    '\n⚠  WARNUNG: Kein TLS-Zertifikat gefunden (key.pem / cert.pem).\n' +
+    '   Der Server läuft im HTTP/WS-Modus — NUR für lokale Entwicklung.\n' +
+    '   Für Produktion: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes\n\n'
+  );
+}
+
 const server = tlsOpts
   ? https.createServer(tlsOpts, handleReq)
   : require('http').createServer(handleReq);
+
+// Im HTTP-Modus: nur localhost erlauben
+const BIND_ADDR = tlsOpts ? '0.0.0.0' : '127.0.0.1';
 
 function handleReq(req, res) {
   // Security Headers
@@ -165,6 +181,6 @@ wss.on('connection', ws => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  process.stdout.write(`Relay :${PORT} ${tlsOpts ? '(WSS)' : '(WS)'}\n`);
+server.listen(PORT, BIND_ADDR, () => {
+  process.stdout.write(`Relay :${PORT} ${tlsOpts ? '(WSS/TLS ✓)' : '(WS — nur localhost!)'}\n`);
 });
