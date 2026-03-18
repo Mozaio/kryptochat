@@ -54,10 +54,10 @@ function handleReq(req, res) {
   // Security Headers
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net https://esm.sh 'sha256-NIZ8UoxA+S1nmU6OoFhl9bQe3KAX7V1+5sJwMtKPwgY='",
+    "script-src 'self' https://cdn.jsdelivr.net https://esm.sh 'sha256-Ci8ScCrPb+zJojyhySbELlZQoESt8TTmRv0omYHY2S8='",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
-    "connect-src 'self' wss: ws:",
+    "connect-src 'self' wss: ws: https://esm.sh https://cdn.jsdelivr.net",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'none'"
