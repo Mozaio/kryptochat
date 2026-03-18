@@ -11,7 +11,7 @@
 <script type="module">
   try {
     // @noble/post-quantum v0.5.4 — exports ml_kem768 from /ml-kem.js
-    const pq = await import('https://esm.sh/@noble/post-quantum@0.5.4/ml-kem.js');
+    const pq = await import('https://esm.sh/@noble/post-quantum@0.5.4/ml-kem.js?no-source-map');
     window.nobleKyber = pq;
   } catch(e) {
     try {
