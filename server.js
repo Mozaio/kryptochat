@@ -45,8 +45,10 @@ const server = tlsOpts
   ? https.createServer(tlsOpts, handleReq)
   : require('http').createServer(handleReq);
 
-// Im HTTP-Modus: nur localhost erlauben
-const BIND_ADDR = tlsOpts ? '0.0.0.0' : '127.0.0.1';
+// Immer auf 0.0.0.0 binden — in Container-Deployments übernimmt der
+// Reverse-Proxy (nginx/Caddy) das TLS-Termination. Der interne Port
+// ist ohnehin nicht von außen erreichbar.
+const BIND_ADDR = '0.0.0.0';
 
 function handleReq(req, res) {
   // Security Headers
