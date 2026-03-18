@@ -31,13 +31,13 @@ const MIME = {
   '.png':  'image/png',                '.svg': 'image/svg+xml'
 };
 
-// TLS-Pflicht: ohne Zertifikat wird gewarnt und nur auf localhost gestartet.
-// Für Produktion: key.pem + cert.pem müssen vorhanden sein.
+// TLS enforcement: without a certificate, only localhost is bound.
+// For production: key.pem + cert.pem must be present.
 if (!tlsOpts) {
   process.stderr.write(
-    '\n⚠  WARNUNG: Kein TLS-Zertifikat gefunden (key.pem / cert.pem).\n' +
-    '   Der Server läuft im HTTP/WS-Modus — NUR für lokale Entwicklung.\n' +
-    '   Für Produktion: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes\n\n'
+    '\n⚠  WARNING: No TLS certificate found (key.pem / cert.pem).\n' +
+    '   Server running in HTTP/WS mode — LOCAL DEVELOPMENT ONLY.\n' +
+    '   For production: openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes\n\n'
   );
 }
 
@@ -54,7 +54,7 @@ function handleReq(req, res) {
   // Security Headers
   res.setHeader('Content-Security-Policy', [
     "default-src 'self'",
-    "script-src 'self' https://cdn.jsdelivr.net",
+    "script-src 'self' https://cdn.jsdelivr.net https://esm.sh",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src https://fonts.gstatic.com",
     "connect-src 'self' wss: ws:",
@@ -184,5 +184,5 @@ wss.on('connection', ws => {
 });
 
 server.listen(PORT, BIND_ADDR, () => {
-  process.stdout.write(`Relay :${PORT} ${tlsOpts ? '(WSS/TLS ✓)' : '(WS — nur localhost!)'}\n`);
+  process.stdout.write(`Relay :${PORT} ${tlsOpts ? '(WSS/TLS ✓)' : '(WS — localhost only!)'}\n`);
 });
