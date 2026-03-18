@@ -83,7 +83,7 @@
   }
   window.addEventListener('beforeunload', cleanup);
   window.addEventListener('pagehide',     cleanup);
-  window.addEventListener('unload',       cleanup);
+  // 'unload' is deprecated — 'pagehide' covers the same use case
 
   // ── Join ─────────────────────────────────────────
   $('rin').addEventListener('keydown', e => { if (e.key === 'Enter') joinRoom(); });
