@@ -7,6 +7,19 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
+<script type="module">
+  try {
+    const pq = await import('https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.2.0/kyber.js');
+    window.nobleKyber = pq;
+  } catch(e) {
+    try {
+      const pq = await import('https://esm.sh/@noble/post-quantum@0.2.0/kyber.js');
+      window.nobleKyber = pq;
+    } catch(e2) {
+      console.warn('ML-KEM library not loaded — classical crypto only');
+    }
+  }
+</script>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -24,6 +37,7 @@
 
 <div class="fp" id="fpm">
   <div class="fp-c">
+    <canvas id="fp-qr" style="display:none;margin:0 auto 8px;border-radius:4px;image-rendering:pixelated;max-width:160px"></canvas>
     <h3>Verify keys</h3>
     <p class="fp-sub">Compare the fingerprint with your partner — via a SECURE second channel.</p>
     <div class="fp-grid">
@@ -61,6 +75,7 @@
         <span style="color:var(--gn-d)">●</span> Double Ratchet<br>
         <span style="color:var(--gn-d)">●</span> Sealed Sender<br>
         <span style="color:var(--gn-d)">●</span> Post-Compromise Security<br>
+        <span style="color:var(--gn-d)">●</span> Post-Quantum (ML-KEM-768)<br>
         <span style="color:var(--gn-d)">●</span> Commitment Key Exchange<br>
         <span style="color:var(--gn-d)">●</span> Zero-Knowledge Server
       </p>
