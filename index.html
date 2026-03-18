@@ -6,7 +6,8 @@
 <title>Kryptochat</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js"></script>
+<!-- SRI: generate hash with: curl https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js | openssl dgst -sha384 -binary | openssl base64 -A -->
+<script src="https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/nacl.min.js" crossorigin="anonymous"></script>
 <script type="module">
   try {
     const pq = await import('https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.2.0/kyber.js');
