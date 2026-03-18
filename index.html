@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,24 +15,24 @@
   <div class="cd">
     <div class="ico">🔐</div>
     <h1>KRYPTOCHAT</h1>
-    <p class="sub">Double Ratchet · Sealed Sender · Zero-Knowledge<br>Besser als Signal — ohne Telefonnummer</p>
-    <input type="text" id="rin" placeholder="Raumname..." maxlength="64" autofocus autocomplete="off">
-    <button class="btn" id="jbtn">VERBINDEN</button>
+    <p class="sub">Double Ratchet · Sealed Sender · Zero-Knowledge<br>Better than Signal — no phone number required</p>
+    <input type="text" id="rin" placeholder="Room name..." maxlength="64" autofocus autocomplete="off">
+    <button class="btn" id="jbtn">CONNECT</button>
     <div class="st" id="jst"></div>
   </div>
 </div>
 
 <div class="fp" id="fpm">
   <div class="fp-c">
-    <h3>Schlüssel verifizieren</h3>
-    <p class="fp-sub">Vergleiche den Fingerabdruck mit deinem Partner — über einen SICHEREN Zweitkanal.</p>
+    <h3>Verify keys</h3>
+    <p class="fp-sub">Compare the fingerprint with your partner — via a SECURE second channel.</p>
     <div class="fp-grid">
-      <div class="fp-b"><label>Dein Fingerabdruck</label><code id="mfp"></code></div>
-      <div class="fp-b"><label>Peer Fingerabdruck</label><code id="pfp"></code></div>
+      <div class="fp-b"><label>Your fingerprint</label><code id="mfp"></code></div>
+      <div class="fp-b"><label>Peer fingerprint</label><code id="pfp"></code></div>
     </div>
     <div class="fp-a">
-      <button class="y" id="fpy">VERIFIZIERT</button>
-      <button class="n" id="fpn">ABBRECHEN</button>
+      <button class="y" id="fpy">VERIFIED</button>
+      <button class="n" id="fpn">CANCEL</button>
     </div>
   </div>
 </div>
@@ -43,17 +43,17 @@
       <div class="logo"><div class="logo-i">🔑</div>KRYPTOCHAT</div>
     </div>
     <div class="sb-s">
-      <h4>Anon-ID</h4>
+      <h4>Anon ID</h4>
       <div class="id-d" id="mid">—</div>
     </div>
     <div class="sb-s">
-      <h4>Raum</h4>
+      <h4>Room</h4>
       <div class="id-d" id="drm" style="text-align:center">—</div>
     </div>
     <div class="sb-s">
       <h4>Peers</h4>
       <ul class="p-l" id="pl">
-        <li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Warte...</li>
+        <li style="font-family:var(--fm);font-size:10px;color:var(--t3)">Waiting...</li>
       </ul>
     </div>
     <div class="sn">
@@ -66,19 +66,19 @@
       </p>
     </div>
     <div class="sb-s">
-      <h4>Transcript-Hash</h4>
-      <div class="id-d" id="transcript-hash" title="Laufender Hash aller Nachrichten — Manipulation erkennbar">
+      <h4>Transcript hash</h4>
+      <div class="id-d" id="transcript-hash" title="Running hash of all messages — tampering detectable">
         —
       </div>
     </div>
     <div class="sb-s">
-      <h4>Nachrichten</h4>
+      <h4>Messages</h4>
       <select id="disappear-sel" style="width:100%;padding:4px 6px;border-radius:6px;border:1px solid var(--bo);background:var(--bg2);color:var(--t1);font-size:12px;cursor:pointer">
-        <option value="0">Nicht löschen</option>
-        <option value="30">Nach 30 Sekunden</option>
-        <option value="60">Nach 1 Minute</option>
-        <option value="300">Nach 5 Minuten</option>
-        <option value="3600">Nach 1 Stunde</option>
+        <option value="0">Keep messages</option>
+        <option value="30">After 30 seconds</option>
+        <option value="60">After 1 minute</option>
+        <option value="300">After 5 minutes</option>
+        <option value="3600">After 1 hour</option>
       </select>
     </div>
   </aside>
@@ -94,17 +94,17 @@
     <div class="mc" id="mc">
       <div class="es" id="es">
         <div class="ei">🔐</div>
-        <p>Warte auf Peer...</p>
+        <p>Waiting for peer...</p>
       </div>
     </div>
     <div class="ia">
       <div class="iw">
-        <textarea class="mn" id="min" placeholder="Verbinde zuerst..." rows="1" disabled></textarea>
+        <textarea class="mn" id="min" placeholder="Connect first..." rows="1" disabled></textarea>
         <button class="bs" id="sbtn" disabled>↑</button>
       </div>
       <div class="ih">
-        <span>Shift+Enter = neue Zeile</span>
-        <span id="est">Getrennt</span>
+        <span>Shift+Enter = new line</span>
+        <span id="est">Disconnected</span>
       </div>
     </div>
   </main>
