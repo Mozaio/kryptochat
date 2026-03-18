@@ -37,10 +37,18 @@ const KCrypto = (() => {
   // ── Session-Fingerprint (sharedSecret einbezogen) ──
   // Wenn beide Seiten denselben Fingerprint sehen → kein MITM möglich
   function fingerprintSession(sharedSecret, myPubKey, theirPubKey) {
+    // Keys must be sorted so both sides compute the same hash regardless of who calls it.
+    // Alice: hash(ss, alicePub, bobPub)
+    // Bob:   hash(ss, alicePub, bobPub)  ← same, because we sort by value
+    let first = myPubKey, second = theirPubKey;
+    for (let i = 0; i < 32; i++) {
+      if (myPubKey[i] < theirPubKey[i]) { first = myPubKey;  second = theirPubKey; break; }
+      if (myPubKey[i] > theirPubKey[i]) { first = theirPubKey; second = myPubKey; break; }
+    }
     const input = new Uint8Array(96);
     input.set(sharedSecret, 0);
-    input.set(myPubKey,     32);
-    input.set(theirPubKey,  64);
+    input.set(first,        32);
+    input.set(second,       64);
     const h = nacl.hash(input);
     burn(input);
     return Array.from(h.slice(0, 16))
