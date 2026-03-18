@@ -49,13 +49,6 @@ const DoubleRatchet = (() => {
     return { chainKey: ck, messageKey: mk };
   }
 
-  // Header-Keys aus rootKey ableiten (nach DH-Schritt)
-  async function deriveHeaderKeys(rootKey) {
-    const hkAB = await hkdf(new Uint8Array(32), rootKey, 'kryptochat-header-a-to-b-v1', 32);
-    const hkBA = await hkdf(new Uint8Array(32), rootKey, 'kryptochat-header-b-to-a-v1', 32);
-    return { hkAB, hkBA };
-  }
-
   // ── Header-Verschlüsselung ────────────────────────
   // Format: nacl.secretbox({ dh(32), n(4), pn(4) }, nonce, headerKey)
 
@@ -100,22 +93,24 @@ const DoubleRatchet = (() => {
 
   function _pad(pt) {
     const data = typeof pt === 'string' ? new TextEncoder().encode(pt) : pt;
-    if (data.length > PAD_BLOCK - 2) return data;
-    const out = new Uint8Array(PAD_BLOCK);
+    // Pad to nearest PAD_BLOCK boundary — hides message length for ALL sizes
+    const totalNeeded = data.length + 2; // 2 bytes for length prefix
+    const blocks = Math.max(1, Math.ceil(totalNeeded / PAD_BLOCK));
+    const padded = blocks * PAD_BLOCK;
+    const out = new Uint8Array(padded);
     new DataView(out.buffer).setUint16(0, data.length, false);
     out.set(data, 2);
-    out.set(nacl.randomBytes(PAD_BLOCK - 2 - data.length), 2 + data.length);
+    // Fill remaining with random bytes
+    const padStart = 2 + data.length;
+    if (padStart < padded) out.set(nacl.randomBytes(padded - padStart), padStart);
     return out;
   }
 
   function _unpad(buf) {
     if (!buf || buf.length < 2) return null;
-    if (buf.length <= PAD_BLOCK) {
-      const len = new DataView(buf.buffer, buf.byteOffset).getUint16(0, false);
-      if (len === 0 || len > buf.length - 2) return null;
-      return new TextDecoder().decode(buf.slice(2, 2 + len));
-    }
-    return new TextDecoder().decode(buf);
+    const len = new DataView(buf.buffer, buf.byteOffset).getUint16(0, false);
+    if (len === 0 || len > buf.length - 2) return null;
+    return new TextDecoder().decode(buf.slice(2, 2 + len));
   }
 
   function _burn(...arrays) {
