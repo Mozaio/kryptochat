@@ -240,7 +240,8 @@ const DoubleRatchet = (() => {
     const n  = ratchet.sendCount++;
     ratchet.totalSent++;
 
-    // Header verschlüsseln
+    // Header verschlüsseln — Guard: sendHeaderKey muss gesetzt sein (von initHeaderKeys)
+    if (!ratchet.sendHeaderKey) { _burn(mk); return null; }
     const encHeader = _encHdr(ratchet.sendHeaderKey, ratchet.dhSendKeyPair.publicKey, n, ratchet.prevCount);
     const enc = _encMsg(mk, plaintext);
     _burn(mk);
